@@ -429,7 +429,6 @@
                         });
                         question.querySelector('.drag-item-count').textContent=(items.length-count)+' @lang('left')';
                         question.querySelector('.drag-match-count').textContent=count+' / '+targets.length+' @lang('assigned')';
-                        question.querySelector('.drag-confirm-count').textContent=count+'/'+targets.length;
                         question.querySelector('.drag-reset').classList.toggle('d-none',count===0||committed.has(current)||checking);
                         if(confirmButton){
                             const confirmed=committed.has(current);
@@ -498,7 +497,7 @@
                             loading=false;
                             dragConfirmationPending=false;
                             hideActionLoader();
-                            render(false);
+                            try{render(false)}finally{refresh()}
                         }
                     }
                     items.forEach(item=>{
