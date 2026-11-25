@@ -51,6 +51,14 @@
                         <button type="button" class="btn btn--base exam-resume-button" id="resumeExam">@lang('Resume exam')</button>
                     </section>
                 </div>
+                <div class="exam-action-loader" id="examActionLoader" hidden aria-hidden="true">
+                    <div class="exam-action-loader__backdrop"></div>
+                    <div class="exam-action-loader__card" role="status" aria-live="polite">
+                        <span class="exam-action-loader__spinner" aria-hidden="true"><i></i></span>
+                        <span class="exam-action-loader__copy"><strong id="examActionLoaderTitle">@lang('Working on it')</strong><span id="examActionLoaderDetail">@lang('Please wait while this finishes.')</span></span>
+                        <span class="exam-action-loader__dots" aria-hidden="true"><i></i><i></i><i></i></span>
+                    </div>
+                </div>
             </form>
         </div>
     </section>
@@ -73,6 +81,9 @@
                 const pauseButton=document.getElementById('examPauseToggle');
                 const pauseDialog=document.getElementById('examPauseDialog');
                 const resumeButton=document.getElementById('resumeExam');
+                const actionLoader=document.getElementById('examActionLoader');
+                const actionLoaderTitle=document.getElementById('examActionLoaderTitle');
+                const actionLoaderDetail=document.getElementById('examActionLoaderDetail');
                 const flowFooter=document.querySelector('.exam-flow-footer');
                 const flowSidebar=document.getElementById('examQuestionSidebar');
                 const mobileToolbar=document.getElementById('examMobileToolbar');
@@ -81,6 +92,24 @@
                 const mobileQuestionNavDrawer=document.getElementById('mobileQuestionNavDrawer');
                 const mobileQuestionNavToggle=document.getElementById('mobileQuestionNavToggle');
                 const mobileLayoutQuery=window.matchMedia('(max-width: 767px)');
+                let actionLoaderHideTimer=null;
+                function showActionLoader(title,detail='@lang('Please wait while this finishes.')'){
+                    if(!actionLoader)return;
+                    window.clearTimeout(actionLoaderHideTimer);
+                    if(actionLoaderTitle)actionLoaderTitle.textContent=title;
+                    if(actionLoaderDetail)actionLoaderDetail.textContent=detail;
+                    actionLoader.hidden=false;
+                    actionLoader.setAttribute('aria-hidden','false');
+                    requestAnimationFrame(()=>{if(actionLoader.getAttribute('aria-hidden')==='false')actionLoader.classList.add('is-visible')});
+                }
+                function hideActionLoader(){
+                    if(!actionLoader)return;
+                    actionLoader.classList.remove('is-visible');
+                    actionLoader.setAttribute('aria-hidden','true');
+                    actionLoaderHideTimer=window.setTimeout(()=>{
+                        if(actionLoader.getAttribute('aria-hidden')==='true')actionLoader.hidden=true;
+                    },220);
+                }
                 function syncFullscreenToggle(){
                     if(!fullscreenToggle)return;
                     const isFullscreen=document.fullscreenElement===examSurface;
@@ -94,11 +123,14 @@
                     fullscreenToggle.setAttribute('aria-pressed',String(isFullscreen));
                 }
                 fullscreenToggle?.addEventListener('click',async()=>{
+                    const isFullscreen=document.fullscreenElement===examSurface;
+                    showActionLoader(isFullscreen?'@lang('Leaving full screen')':'@lang('Opening full screen')','@lang('Updating your exam view.')');
                     try{
-                        if(document.fullscreenElement===examSurface)await document.exitFullscreen();
+                        if(isFullscreen)await document.exitFullscreen();
                         else if(examSurface?.requestFullscreen)await examSurface.requestFullscreen();
                         else throw new Error('Fullscreen is not available in this browser.');
                     }catch(error){notify('error','@lang('Unable to open fullscreen mode in this browser.')')}
+                    finally{hideActionLoader()}
                 });
                 document.addEventListener('fullscreenchange',syncFullscreenToggle);
                 syncFullscreenToggle();
@@ -196,8 +228,17 @@
                     renderClock();
                     if(shouldPersist&&changed)persistSession();
                 }
-                pauseButton?.addEventListener('click',()=>setPaused(true));
-                resumeButton?.addEventListener('click',()=>setPaused(false));
+                async function handlePauseAction(paused){
+                    if(loading||submitting||dragConfirmationPending)return;
+                    const changed=timerPaused!==Boolean(paused);
+                    setPaused(paused,false);
+                    if(!changed)return;
+                    showActionLoader(paused?'@lang('Pausing exam')':'@lang('Resuming exam')','@lang('Saving your exam progress.')');
+                    try{await persistSession()}
+                    finally{hideActionLoader()}
+                }
+                pauseButton?.addEventListener('click',()=>handlePauseAction(true));
+                resumeButton?.addEventListener('click',()=>handlePauseAction(false));
                 function fetchWithTimeout(url,options,timeoutMs){
                     const controller=new AbortController();
                     const timeoutId=window.setTimeout(()=>controller.abort(),timeoutMs);
@@ -294,15 +335,18 @@
                 }
                 async function revealCurrent(force=false){
                     if(loading&&!force)return false;
+                    const ownsLoading=!force;
+                    if(ownsLoading){loading=true;refresh();showActionLoader('@lang('Checking answer')','@lang('Your answer is being checked.')')}
                     const payload=currentPayload();
                     try{
-                        const response=await fetch(answerUrl.replace('__INDEX__',String(current)),{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':csrfToken,'X-Requested-With':'XMLHttpRequest'},body:JSON.stringify({answer:payload.answer,answer_data:payload.answerData})});
+                        const response=await fetchWithTimeout(answerUrl.replace('__INDEX__',String(current)),{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':csrfToken,'X-Requested-With':'XMLHttpRequest'},body:JSON.stringify({answer:payload.answer,answer_data:payload.answerData})},12000);
                         if(!response.ok)throw new Error('Unable to check this answer');
                         const result=await response.json();
                         const wasAnswered=hasAnswer();revealed.add(current);committed.add(current);if(wasAnswered)answeredIndexes.add(current);
                         if(result.is_correct)incorrectIndexes.delete(current);else if(wasAnswered)incorrectIndexes.add(current);else incorrectIndexes.delete(current);
                         renderFeedback(result,payload);updateScore(result.live_score);refresh();await persistSession();return true;
                     }catch(error){notify('error','@lang('Unable to check this answer. Please try again.')');return false}
+                    finally{if(ownsLoading){loading=false;refresh();hideActionLoader()}}
                 }
                 function bindDrag(){
                     const question=document.querySelector('.drag-question');
@@ -431,6 +475,8 @@
                         loading=true;
                         dragConfirmationPending=true;
                         render(false);
+                        refresh();
+                        showActionLoader('@lang('Checking matches')','@lang('Your matches are being checked.')');
                         const submitted={...placements};
                         try{
                             await flushSessionSaves();
@@ -453,6 +499,7 @@
                             render(false);
                             updateScore(result.live_score);
                             persistSession();
+                            hideActionLoader();
                         }catch(error){
                             checking=false;
                             loading=false;
@@ -460,6 +507,7 @@
                             render(false);
                             persistSession();
                             notify('error','@lang('Unable to confirm these matches. Please try again.')');
+                            hideActionLoader();
                         }
                     }
                     items.forEach(item=>{
@@ -594,9 +642,9 @@
                     });
                     bindImageViewers(node);bindDrag();refresh();
                 }
-                async function loadQuestion(index,commitBeforeMove=false){
+                async function loadQuestion(index,commitBeforeMove=false,actionTitle='@lang('Loading question')'){
                     if(loading||index<0||index>=totalQuestions)return;
-                    loading=true;container.classList.add('is-loading');refresh();
+                    loading=true;container.classList.add('is-loading');refresh();showActionLoader(actionTitle,'@lang('Your exam is being saved and the question is loading.')');
                     try{
                         if(commitBeforeMove&&inlineFeedback&&hasAnswer()&&!revealed.has(current)){const committedOk=await revealCurrent(true);if(!committedOk)return}
                         else await persistSession();
@@ -608,10 +656,10 @@
                         bindCurrent();refresh(true);
                         if(payload.revealed)window.setTimeout(()=>revealCurrent(),0);
                     }catch(error){notify('error','@lang('Unable to load this question. Please try again.')')}
-                    finally{loading=false;container.classList.remove('is-loading');refresh()}
+                    finally{loading=false;container.classList.remove('is-loading');refresh();hideActionLoader()}
                 }
-                next.addEventListener('click',()=>loadQuestion(current+1,requiredActionComplete()));
-                prev.addEventListener('click',()=>loadQuestion(current-1));
+                next.addEventListener('click',()=>{const canContinue=requiredActionComplete();loadQuestion(current+1,canContinue,canContinue?'@lang('Loading next question')':'@lang('Skipping question')')});
+                prev.addEventListener('click',()=>loadQuestion(current-1,false,'@lang('Loading previous question')'));
                 mobileQuestionNavToggle?.addEventListener('click',()=>{
                     const isOpen=mobileQuestionNavDrawer?.hidden??true;
                     if(mobileQuestionNavDrawer)mobileQuestionNavDrawer.hidden=!isOpen;
@@ -620,9 +668,15 @@
                 nav.forEach(button=>button.addEventListener('click',()=>{
                     if(mobileQuestionNavDrawer)mobileQuestionNavDrawer.hidden=true;
                     mobileQuestionNavToggle?.setAttribute('aria-expanded','false');
-                    loadQuestion(Number(button.dataset.goTo));
+                    loadQuestion(Number(button.dataset.goTo),false,'@lang('Opening question')');
                 }));
-                review.addEventListener('click',()=>{reviewed.has(current)?reviewed.delete(current):reviewed.add(current);refresh();persistSession()});
+                review.addEventListener('click',async()=>{
+                    if(loading||submitting)return;
+                    reviewed.has(current)?reviewed.delete(current):reviewed.add(current);
+                    loading=true;refresh();showActionLoader('@lang('Saving review status')','@lang('Your exam progress is being saved.')');
+                    try{await persistSession()}
+                    finally{loading=false;refresh();hideActionLoader()}
+                });
                 showAnswer?.addEventListener('click',revealCurrent);
                 document.addEventListener('visibilitychange',()=>{
                     if(document.hidden)setPaused(true);
@@ -630,8 +684,8 @@
                 });
                 window.addEventListener('blur',()=>setPaused(true));
                 window.addEventListener('pagehide',()=>setPaused(true));
-                form?.addEventListener('submit',async event=>{if(submittedByTimer)return;event.preventDefault();if(submitting)return;submitting=true;form.querySelectorAll('button[type="submit"]').forEach(button=>{button.disabled=true;button.innerHTML='<i class="las la-spinner la-spin"></i> @lang('Submitting...')'});await persistSession();HTMLFormElement.prototype.submit.call(form)});
-                function tick(){if(secondsRemaining===null||secondsRemaining===undefined||timerPaused||dragConfirmationPending)return;if(Number(secondsRemaining)<=0){if(!submittedByTimer){submittedByTimer=true;persistSession().finally(()=>HTMLFormElement.prototype.submit.call(form))}return}secondsRemaining=Number(secondsRemaining)-1;renderClock();if(secondsRemaining%5===0)persistSession()}
+                form?.addEventListener('submit',async event=>{if(submittedByTimer){showActionLoader('@lang('Submitting exam')','@lang('Your answers are being submitted.')');return}event.preventDefault();if(submitting)return;submitting=true;showActionLoader('@lang('Submitting exam')','@lang('Your answers are being submitted.')');form.querySelectorAll('button[type="submit"]').forEach(button=>{button.disabled=true;button.innerHTML='<i class="las la-spinner la-spin"></i> @lang('Submitting...')'});await persistSession();HTMLFormElement.prototype.submit.call(form)});
+                function tick(){if(secondsRemaining===null||secondsRemaining===undefined||timerPaused||dragConfirmationPending)return;if(Number(secondsRemaining)<=0){if(!submittedByTimer){submittedByTimer=true;showActionLoader('@lang('Time is up')','@lang('Your exam is being submitted.')');persistSession().finally(()=>HTMLFormElement.prototype.submit.call(form))}return}secondsRemaining=Number(secondsRemaining)-1;renderClock();if(secondsRemaining%5===0)persistSession()}
                 bindCurrent();renderClock();updatePauseDialog();if(timerPaused)persistSession();if(secondsRemaining!==null&&secondsRemaining!==undefined){tick();setInterval(tick,1000)}
                 if(revealed.has(current))revealCurrent();
             })();
