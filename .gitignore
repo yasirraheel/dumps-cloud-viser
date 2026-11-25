@@ -1,0 +1,13 @@
+# Local-only configuration and development files
+/AGENTS.md
+/local-router.php
+/install/
+/core/.env
+/core/.env.*
+!/core/.env.example
+
+# Local runtime and backups
+/core/storage/app/backups/
+/core/storage/logs/
+/core/temp/
+/core/bootstrap/cache/*.php
