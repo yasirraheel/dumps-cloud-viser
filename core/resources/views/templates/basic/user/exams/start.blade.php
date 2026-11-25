@@ -198,21 +198,35 @@
                 }
                 pauseButton?.addEventListener('click',()=>setPaused(true));
                 resumeButton?.addEventListener('click',()=>setPaused(false));
+                function fetchWithTimeout(url,options,timeoutMs){
+                    const controller=new AbortController();
+                    const timeoutId=window.setTimeout(()=>controller.abort(),timeoutMs);
+                    return fetch(url,{...options,signal:controller.signal}).finally(()=>window.clearTimeout(timeoutId));
+                }
                 async function persistSession(){
                     if(!saveUrl||!form||!step()||dragConfirmationPending)return null;
                     try{
-                        sessionSaveQueue=sessionSaveQueue.catch(()=>null).then(()=>fetch(saveUrl,{method:'POST',keepalive:true,headers:{'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':csrfToken,'Cache-Control':'no-cache'},body:JSON.stringify(sessionPayload())}).catch(()=>null));
+                        sessionSaveQueue=sessionSaveQueue.catch(()=>null).then(()=>fetchWithTimeout(saveUrl,{method:'POST',keepalive:true,headers:{'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':csrfToken,'Cache-Control':'no-cache'},body:JSON.stringify(sessionPayload())},7000).catch(()=>null));
                         const response=await sessionSaveQueue;
                         if(!response.ok)return null;
                         const payload=await response.json();updateScore(payload.live_score);return payload;
                     }catch(error){return null}
                 }
-                async function flushSessionSaves(){
-                    while(true){
-                        const pending=sessionSaveQueue;
-                        await pending;
-                        if(pending===sessionSaveQueue)return;
-                    }
+                async function flushSessionSaves(timeoutMs=1800){
+                    let timeoutId;
+                    const flushed=(async()=>{
+                        while(true){
+                            const pending=sessionSaveQueue;
+                            await pending;
+                            if(pending===sessionSaveQueue)return true;
+                        }
+                    })();
+                    const completed=await Promise.race([
+                        flushed,
+                        new Promise(resolve=>{timeoutId=window.setTimeout(()=>resolve(false),timeoutMs)})
+                    ]);
+                    window.clearTimeout(timeoutId);
+                    return completed;
                 }
                 function keepQuestionInView(){
                     const rect=container.getBoundingClientRect();
@@ -420,11 +434,11 @@
                         const submitted={...placements};
                         try{
                             await flushSessionSaves();
-                            const response=await fetch(dragConfirmUrl.replace('__INDEX__',String(confirmedIndex)),{
+                            const response=await fetchWithTimeout(dragConfirmUrl.replace('__INDEX__',String(confirmedIndex)),{
                                 method:'POST',
                                 headers:{'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':csrfToken,'X-Requested-With':'XMLHttpRequest'},
                                 body:JSON.stringify({answer:1,answer_data:submitted})
-                            });
+                            },12000);
                             if(!response.ok)throw new Error('Unable to confirm these matches.');
                             const result=await response.json();
                             if(!result.success)throw new Error('Unable to confirm these matches.');
@@ -438,6 +452,7 @@
                             dragConfirmationPending=false;
                             render(false);
                             updateScore(result.live_score);
+                            persistSession();
                         }catch(error){
                             checking=false;
                             loading=false;
