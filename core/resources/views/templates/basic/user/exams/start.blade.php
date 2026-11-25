@@ -92,10 +92,8 @@
                 const mobileQuestionNavDrawer=document.getElementById('mobileQuestionNavDrawer');
                 const mobileQuestionNavToggle=document.getElementById('mobileQuestionNavToggle');
                 const mobileLayoutQuery=window.matchMedia('(max-width: 767px)');
-                let actionLoaderHideTimer=null;
                 function showActionLoader(title,detail='@lang('Please wait while this finishes.')'){
                     if(!actionLoader)return;
-                    window.clearTimeout(actionLoaderHideTimer);
                     if(actionLoaderTitle)actionLoaderTitle.textContent=title;
                     if(actionLoaderDetail)actionLoaderDetail.textContent=detail;
                     actionLoader.hidden=false;
@@ -106,9 +104,7 @@
                     if(!actionLoader)return;
                     actionLoader.classList.remove('is-visible');
                     actionLoader.setAttribute('aria-hidden','true');
-                    actionLoaderHideTimer=window.setTimeout(()=>{
-                        if(actionLoader.getAttribute('aria-hidden')==='true')actionLoader.hidden=true;
-                    },220);
+                    actionLoader.hidden=true;
                 }
                 function syncFullscreenToggle(){
                     if(!fullscreenToggle)return;
@@ -488,6 +484,7 @@
                             },6000);
                             if(!response.ok)throw new Error('Unable to confirm these matches.');
                             if(!result.success)throw new Error('Unable to confirm these matches.');
+                            hideActionLoader();
                             feedback=result;
                             committed.add(confirmedIndex);
                             answeredIndexes.add(confirmedIndex);
@@ -500,8 +497,8 @@
                             checking=false;
                             loading=false;
                             dragConfirmationPending=false;
-                            render(false);
                             hideActionLoader();
+                            render(false);
                         }
                     }
                     items.forEach(item=>{
