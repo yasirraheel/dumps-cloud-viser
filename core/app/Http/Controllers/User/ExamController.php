@@ -353,22 +353,13 @@ class ExamController extends Controller {
             $attempt->save();
         }
 
-        $questionScore = ExamScoreCalculator::evaluate(
-            collect([$question]),
-            [$questionId => $answers[$questionId] ?? 1],
-            [$questionId => $answerDataByQuestion[$questionId] ?? $normalizedMatches],
-            [0],
-            (float) $exam->pass_percentage
-        )['question_results'][$questionId] ?? [];
         $feedback = $this->dragDropFeedbackForQuestion($question, (array) ($answerDataByQuestion[$questionId] ?? $normalizedMatches));
-        $liveScore = $this->liveScoreForAttempt($exam, $attempt, $allQuestionIds, $flowIds);
 
         return response()->json([
             'success' => true,
-            'is_correct' => (bool) ($questionScore['is_correct'] ?? false),
+            'is_correct' => $feedback['is_correct'],
             'correct_matches' => $feedback['correct_matches'],
             'slot_results' => $feedback['slot_results'],
-            'live_score' => $liveScore,
         ]);
     }
 

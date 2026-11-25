@@ -214,6 +214,14 @@
                     if(!scoreBox||!score)return;
                     scoreBox.innerHTML='<strong>'+Number(score.correct||0)+'/'+Number(score.total_questions||0)+'</strong><b>'+Number(score.percentage||0).toFixed(2)+'%</b>';
                 }
+                function updateDragScore(isCorrect){
+                    if(!scoreBox)return;
+                    const parts=scoreBox.querySelector('strong')?.textContent.match(/(\d+)\s*\/\s*(\d+)/);
+                    if(!parts)return;
+                    const total=Number(parts[2])||0;
+                    const correct=Math.min(total,Number(parts[1])+(isCorrect?1:0));
+                    updateScore({correct,total_questions:total,percentage:total?correct*100/total:0});
+                }
                 function updatePauseDialog(){
                     if(!pauseDialog)return;
                     pauseDialog.hidden=!timerPaused;
@@ -485,18 +493,14 @@
                             answeredIndexes.add(confirmedIndex);
                             if(result.is_correct)incorrectIndexes.delete(confirmedIndex);else incorrectIndexes.add(confirmedIndex);
                             question.classList.add('is-confirmed');
-                            checking=false;
-                            loading=false;
-                            dragConfirmationPending=false;
-                            render(false);
-                            updateScore(result.live_score);
-                            hideActionLoader();
+                            updateDragScore(result.is_correct);
                         }catch(error){
+                            notify('error','@lang('Unable to confirm these matches. Please try again.')');
+                        }finally{
                             checking=false;
                             loading=false;
                             dragConfirmationPending=false;
                             render(false);
-                            notify('error','@lang('Unable to confirm these matches. Please try again.')');
                             hideActionLoader();
                         }
                     }
