@@ -5,6 +5,12 @@
 
     RewriteEngine On
 
+    # Keep application internals and Git metadata out of the public web root.
+    RewriteRule ^core(?:/|$) - [F,L,NC]
+    RewriteRule (^|/)\.git(?:/|$) - [F,L,NC]
+    RewriteRule (^|/)\.env(?:\.[^/]+)?$ - [F,L,NC]
+    RewriteRule (^|/)\.(?:gitignore|gitattributes)$ - [F,L,NC]
+
     # Handle Authorization Header
     RewriteCond %{HTTP:Authorization} .
     RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
