@@ -239,35 +239,30 @@
                 }
                 pauseButton?.addEventListener('click',()=>handlePauseAction(true));
                 resumeButton?.addEventListener('click',()=>handlePauseAction(false));
-                function fetchWithTimeout(url,options,timeoutMs){
+                function fetchJsonWithTimeout(url,options,timeoutMs){
                     const controller=new AbortController();
-                    const timeoutId=window.setTimeout(()=>controller.abort(),timeoutMs);
-                    return fetch(url,{...options,signal:controller.signal}).finally(()=>window.clearTimeout(timeoutId));
+                    let timeoutId;
+                    const request=(async()=>{
+                        const response=await fetch(url,{...options,signal:controller.signal});
+                        const payload=await response.json();
+                        return {response,payload};
+                    })();
+                    const timeout=new Promise((resolve,reject)=>{
+                        timeoutId=window.setTimeout(()=>{controller.abort();reject(new Error('Request timed out'))},timeoutMs);
+                    });
+                    return Promise.race([request,timeout]).finally(()=>window.clearTimeout(timeoutId));
                 }
                 async function persistSession(){
                     if(!saveUrl||!form||!step()||dragConfirmationPending)return null;
                     try{
-                        sessionSaveQueue=sessionSaveQueue.catch(()=>null).then(()=>fetchWithTimeout(saveUrl,{method:'POST',keepalive:true,headers:{'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':csrfToken,'Cache-Control':'no-cache'},body:JSON.stringify(sessionPayload())},7000).catch(()=>null));
-                        const response=await sessionSaveQueue;
-                        if(!response.ok)return null;
-                        const payload=await response.json();updateScore(payload.live_score);return payload;
+                        sessionSaveQueue=sessionSaveQueue.catch(()=>null).then(async()=>{
+                            const {response,payload}=await fetchJsonWithTimeout(saveUrl,{method:'POST',keepalive:true,headers:{'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':csrfToken,'Cache-Control':'no-cache'},body:JSON.stringify(sessionPayload())},7000);
+                            return response.ok?payload:null;
+                        }).catch(()=>null);
+                        const payload=await sessionSaveQueue;
+                        if(!payload?.success)return null;
+                        updateScore(payload.live_score);return payload;
                     }catch(error){return null}
-                }
-                async function flushSessionSaves(timeoutMs=1800){
-                    let timeoutId;
-                    const flushed=(async()=>{
-                        while(true){
-                            const pending=sessionSaveQueue;
-                            await pending;
-                            if(pending===sessionSaveQueue)return true;
-                        }
-                    })();
-                    const completed=await Promise.race([
-                        flushed,
-                        new Promise(resolve=>{timeoutId=window.setTimeout(()=>resolve(false),timeoutMs)})
-                    ]);
-                    window.clearTimeout(timeoutId);
-                    return completed;
                 }
                 function keepQuestionInView(){
                     const rect=container.getBoundingClientRect();
@@ -339,9 +334,8 @@
                     if(ownsLoading){loading=true;refresh();showActionLoader('@lang('Checking answer')','@lang('Your answer is being checked.')')}
                     const payload=currentPayload();
                     try{
-                        const response=await fetchWithTimeout(answerUrl.replace('__INDEX__',String(current)),{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':csrfToken,'X-Requested-With':'XMLHttpRequest'},body:JSON.stringify({answer:payload.answer,answer_data:payload.answerData})},12000);
+                        const {response,payload:result}=await fetchJsonWithTimeout(answerUrl.replace('__INDEX__',String(current)),{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':csrfToken,'X-Requested-With':'XMLHttpRequest'},body:JSON.stringify({answer:payload.answer,answer_data:payload.answerData})},8000);
                         if(!response.ok)throw new Error('Unable to check this answer');
-                        const result=await response.json();
                         const wasAnswered=hasAnswer();revealed.add(current);committed.add(current);if(wasAnswered)answeredIndexes.add(current);
                         if(result.is_correct)incorrectIndexes.delete(current);else if(wasAnswered)incorrectIndexes.add(current);else incorrectIndexes.delete(current);
                         renderFeedback(result,payload);updateScore(result.live_score);refresh();await persistSession();return true;
@@ -362,7 +356,7 @@
                     let selected=null,dragged=null,checking=false,feedback=null;
                     try{feedback=JSON.parse(question.dataset.dragFeedback||'null')}catch(error){feedback=null}
                     const targetForItem=item=>Object.keys(placements).find(target=>placements[target]===item)||null;
-                    const render=(persist=true)=>{
+                    const render=(persist=false)=>{
                         const assigned=Object.values(placements),count=Object.keys(placements).length,confirmed=committed.has(current);
                         items.forEach(item=>{
                             const placed=assigned.includes(item.dataset.item);
@@ -479,14 +473,12 @@
                         showActionLoader('@lang('Checking matches')','@lang('Your matches are being checked.')');
                         const submitted={...placements};
                         try{
-                            await flushSessionSaves();
-                            const response=await fetchWithTimeout(dragConfirmUrl.replace('__INDEX__',String(confirmedIndex)),{
+                            const {response,payload:result}=await fetchJsonWithTimeout(dragConfirmUrl.replace('__INDEX__',String(confirmedIndex)),{
                                 method:'POST',
                                 headers:{'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':csrfToken,'X-Requested-With':'XMLHttpRequest'},
                                 body:JSON.stringify({answer:1,answer_data:submitted})
-                            },12000);
+                            },6000);
                             if(!response.ok)throw new Error('Unable to confirm these matches.');
-                            const result=await response.json();
                             if(!result.success)throw new Error('Unable to confirm these matches.');
                             feedback=result;
                             committed.add(confirmedIndex);
@@ -498,14 +490,12 @@
                             dragConfirmationPending=false;
                             render(false);
                             updateScore(result.live_score);
-                            persistSession();
                             hideActionLoader();
                         }catch(error){
                             checking=false;
                             loading=false;
                             dragConfirmationPending=false;
                             render(false);
-                            persistSession();
                             notify('error','@lang('Unable to confirm these matches. Please try again.')');
                             hideActionLoader();
                         }
@@ -648,9 +638,9 @@
                     try{
                         if(commitBeforeMove&&inlineFeedback&&hasAnswer()&&!revealed.has(current)){const committedOk=await revealCurrent(true);if(!committedOk)return}
                         else await persistSession();
-                        const response=await fetch(questionUrl.replace('__INDEX__',String(index)),{headers:{Accept:'application/json','X-Requested-With':'XMLHttpRequest','Cache-Control':'no-cache'}});
+                        const {response,payload}=await fetchJsonWithTimeout(questionUrl.replace('__INDEX__',String(index)),{headers:{Accept:'application/json','X-Requested-With':'XMLHttpRequest','Cache-Control':'no-cache'}},12000);
                         if(!response.ok)throw new Error('Question request failed');
-                        const payload=await response.json();container.innerHTML=payload.html;current=index;
+                        container.innerHTML=payload.html;current=index;
                         if(payload.answered)answeredIndexes.add(index);else answeredIndexes.delete(index);
                         if(payload.revealed){revealed.add(index);committed.add(index)}
                         bindCurrent();refresh(true);
@@ -685,7 +675,7 @@
                 window.addEventListener('blur',()=>setPaused(true));
                 window.addEventListener('pagehide',()=>setPaused(true));
                 form?.addEventListener('submit',async event=>{if(submittedByTimer){showActionLoader('@lang('Submitting exam')','@lang('Your answers are being submitted.')');return}event.preventDefault();if(submitting)return;submitting=true;showActionLoader('@lang('Submitting exam')','@lang('Your answers are being submitted.')');form.querySelectorAll('button[type="submit"]').forEach(button=>{button.disabled=true;button.innerHTML='<i class="las la-spinner la-spin"></i> @lang('Submitting...')'});await persistSession();HTMLFormElement.prototype.submit.call(form)});
-                function tick(){if(secondsRemaining===null||secondsRemaining===undefined||timerPaused||dragConfirmationPending)return;if(Number(secondsRemaining)<=0){if(!submittedByTimer){submittedByTimer=true;showActionLoader('@lang('Time is up')','@lang('Your exam is being submitted.')');persistSession().finally(()=>HTMLFormElement.prototype.submit.call(form))}return}secondsRemaining=Number(secondsRemaining)-1;renderClock();if(secondsRemaining%5===0)persistSession()}
+                function tick(){if(secondsRemaining===null||secondsRemaining===undefined||timerPaused||dragConfirmationPending)return;if(Number(secondsRemaining)<=0){if(!submittedByTimer){submittedByTimer=true;showActionLoader('@lang('Time is up')','@lang('Your exam is being submitted.')');persistSession().finally(()=>HTMLFormElement.prototype.submit.call(form))}return}secondsRemaining=Number(secondsRemaining)-1;renderClock();if(secondsRemaining%5===0&&!step()?.querySelector('.drag-question'))persistSession()}
                 bindCurrent();renderClock();updatePauseDialog();if(timerPaused)persistSession();if(secondsRemaining!==null&&secondsRemaining!==undefined){tick();setInterval(tick,1000)}
                 if(revealed.has(current))revealCurrent();
             })();
