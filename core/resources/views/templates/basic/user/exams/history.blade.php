@@ -116,9 +116,15 @@
                                                         </form>
                                                     </div>
                                                     <div>
+                                                        <form method="POST" action="{{ route('user.exam.retake', ['id' => $examLog->id, 'mode' => 'missed']) }}">
+                                                            @csrf
+                                                            <button type="submit" class="dropdown-item"><i class="las la-question-circle" aria-hidden="true"></i><span>@lang('Retake missed') ({{ $examLog->retake_question_counts['missed'] ?? 0 }})</span></button>
+                                                        </form>
+                                                    </div>
+                                                    <div>
                                                         <form method="POST" action="{{ route('user.exam.retake', ['id' => $examLog->id, 'mode' => 'incorrect']) }}">
                                                             @csrf
-                                                            <button type="submit" class="dropdown-item"><i class="las la-times-circle" aria-hidden="true"></i><span>@lang('Retake missed & incorrect') ({{ $examLog->retake_question_counts['incorrect'] ?? 0 }})</span></button>
+                                                            <button type="submit" class="dropdown-item"><i class="las la-times-circle" aria-hidden="true"></i><span>@lang('Retake incorrect') ({{ $examLog->retake_question_counts['incorrect'] ?? 0 }})</span></button>
                                                         </form>
                                                     </div>
                                                     <div>

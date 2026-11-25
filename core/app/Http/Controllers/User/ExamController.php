@@ -654,7 +654,7 @@ class ExamController extends Controller {
 
     public function retake($id, $mode)
     {
-        abort_unless(in_array($mode, ['all', 'incorrect', 'marked'], true), 404);
+        abort_unless(in_array($mode, ['all', 'missed', 'incorrect', 'marked'], true), 404);
 
         $attendExam = AttendExam::where('user_id', auth()->id())->findOrFail($id);
         abort_unless((int) $attendExam->is_submit === Status::YES, 404);
@@ -684,7 +684,7 @@ class ExamController extends Controller {
                     $targetIds[] = $questionId;
                 }
             }
-        } else {
+        } elseif (in_array($mode, ['missed', 'incorrect'], true)) {
             $scoreData = $this->scoreStoredAttempt(
                 $questions,
                 $answerRows,
@@ -694,14 +694,23 @@ class ExamController extends Controller {
             $targetIds = [];
             foreach ($allQuestionIds as $questionId) {
                 $result = $scoreData['question_results'][$questionId] ?? [];
-                if (empty($result['is_correct'])) {
+                $matchesMode = $mode === 'missed'
+                    ? empty($result['answered'])
+                    : !empty($result['answered']) && empty($result['is_correct']);
+                if ($matchesMode) {
                     $targetIds[] = $questionId;
                 }
             }
         }
 
         if (!$targetIds) {
-            $notify[] = ['error', $mode === 'marked' ? 'There are no marked questions to retake.' : 'There are no missed or incorrect questions to retake.'];
+            $message = match ($mode) {
+                'marked' => 'There are no marked questions to retake.',
+                'missed' => 'There are no missed questions to retake.',
+                'incorrect' => 'There are no incorrect questions to retake.',
+                default => 'There are no questions to retake.',
+            };
+            $notify[] = ['error', $message];
             return back()->withNotify($notify);
         }
 
@@ -781,11 +790,15 @@ class ExamController extends Controller {
             $markedCount = count(array_filter($markedIndices, fn ($index) => $index >= 0 && $index < $questions->count()));
             $incorrectCount = count(array_filter(
                 $scoreData['question_results'],
-                fn ($result) => empty($result['is_correct'])
+                fn ($result) => !empty($result['answered']) && empty($result['is_correct'])
             ));
 
             $examLog->setAttribute('retake_question_counts', [
                 'all' => $questions->count(),
+                'missed' => count(array_filter(
+                    $scoreData['question_results'],
+                    fn ($result) => empty($result['answered'])
+                )),
                 'incorrect' => $incorrectCount,
                 'marked' => $markedCount,
             ]);
