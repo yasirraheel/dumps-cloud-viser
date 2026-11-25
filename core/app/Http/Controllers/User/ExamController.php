@@ -116,11 +116,17 @@ class ExamController extends Controller {
         $question          = $this->loadQuestionForAttempt($exam, $flowQuestionIds[$sessionIndex], $attendExam);
         $savedAnswer       = $sessionAnswers[(string) $question->id] ?? $sessionAnswers[$question->id] ?? null;
         $savedDragData     = $sessionAnswerData[(string) $question->id] ?? $sessionAnswerData[$question->id] ?? [];
+        $currentGlobalIndex = array_search((string) $question->id, $allQuestionIds, true);
+        $isQuestionCommitted = $currentGlobalIndex !== false
+            && in_array((int) $currentGlobalIndex, array_map('intval', (array) ($attendExam->committed_questions ?? [])), true);
+        $dragFeedback = $isQuestionCommitted && $question->question_type === 'drag_drop'
+            ? $this->dragDropFeedbackForQuestion($question, $savedDragData)
+            : null;
 
         return view('Template::user.exams.start', compact(
             'pageTitle', 'exam', 'attendExam', 'question', 'questionCount', 'savedAnswer', 'savedDragData',
             'sessionIndex', 'sessionRemaining', 'sessionPaused', 'sessionFlagged', 'sessionRevealed', 'answeredIndexes',
-            'sessionCommitted', 'sessionIncorrect', 'settings', 'showAnswers', 'showLiveScore', 'timerLabel', 'liveScore'
+            'sessionCommitted', 'sessionIncorrect', 'settings', 'showAnswers', 'showLiveScore', 'timerLabel', 'liveScore', 'dragFeedback'
         ));
     }
 
@@ -128,6 +134,18 @@ class ExamController extends Controller {
         return AttendExam::where('user_id', auth()->id())
             ->where('is_submit', Status::NO)
             ->findOrFail($id);
+    }
+
+    private function dragDropFeedbackForQuestion(Question $question, array $submitted): array {
+        $data = ExamScoreCalculator::decodeAnswerData($question->answer_data ?? []);
+        $slotResults = ExamScoreCalculator::dragDropSlotResults($data, $submitted);
+
+        return [
+            'is_correct' => count($slotResults) > 0
+                && collect($slotResults)->every(fn ($result) => ($result['status'] ?? null) === 'correct'),
+            'correct_matches' => (array) ($data['correctMatches'] ?? []),
+            'slot_results' => $slotResults,
+        ];
     }
 
     public function begin(Request $request, $slug) {
@@ -277,6 +295,83 @@ class ExamController extends Controller {
         ]);
     }
 
+    public function confirmDragDrop(Request $request, $id, $index) {
+        $attempt = $this->activeAttempt($id);
+        $exam = Exam::active()->running()->whereKey($attempt->exam_id)->firstOrFail();
+        $allQuestionIds = $this->orderedQuestionIds($exam);
+        $flowIds = $this->flowQuestionIds($allQuestionIds, $attempt);
+        $index = (int) $index;
+        abort_if($index < 0 || $index >= count($flowIds), 404);
+
+        $questionId = (string) $flowIds[$index];
+        $question = $this->loadQuestionForAttempt($exam, $questionId, $attempt);
+        abort_unless($question->question_type === 'drag_drop', 422, 'This is not a drag-and-drop question.');
+
+        $data = ExamScoreCalculator::decodeAnswerData($question->answer_data ?? []);
+        $targets = array_map('strval', array_values((array) ($data['targets'] ?? [])));
+        $items = array_map('strval', array_values((array) ($data['items'] ?? [])));
+        $submitted = ExamScoreCalculator::decodeAnswerData($request->input('answer_data', []));
+        abort_if(!$targets || !$items || !$submitted, 422, 'Place at least one item before confirming.');
+        abort_if(count($submitted) > count($targets), 422, 'Too many target matches were submitted.');
+
+        $availableItemCounts = array_count_values($items);
+        $usedItemCounts = [];
+        $normalizedMatches = [];
+        foreach ($submitted as $target => $item) {
+            $target = (string) $target;
+            abort_unless(in_array($target, $targets, true), 422, 'An invalid target was submitted.');
+            abort_unless(is_scalar($item), 422, 'An invalid item was submitted.');
+            $item = (string) $item;
+            abort_unless(in_array($item, $items, true), 422, 'An invalid item was submitted.');
+
+            $usedItemCounts[$item] = ($usedItemCounts[$item] ?? 0) + 1;
+            abort_if($usedItemCounts[$item] > ($availableItemCounts[$item] ?? 0), 422, 'An item cannot be assigned more than once.');
+            $normalizedMatches[$target] = $item;
+        }
+
+        $globalIndex = array_search($questionId, array_map('strval', $allQuestionIds), true);
+        abort_if($globalIndex === false, 404);
+        $committed = array_map('intval', (array) ($attempt->committed_questions ?? []));
+        $answers = (array) ($attempt->session_answers ?? []);
+        $answerDataByQuestion = (array) ($attempt->session_answer_data ?? []);
+
+        if (in_array((int) $globalIndex, $committed, true)) {
+            $existingMatches = (array) ($answerDataByQuestion[$questionId] ?? []);
+            ksort($existingMatches);
+            $submittedForCompare = $normalizedMatches;
+            ksort($submittedForCompare);
+            abort_unless($existingMatches === $submittedForCompare, 409, 'This answer has already been confirmed.');
+        } else {
+            $answerDataByQuestion[$questionId] = $normalizedMatches;
+            $answers[$questionId] = 1;
+            $committed[] = (int) $globalIndex;
+
+            $attempt->session_answers = $answers;
+            $attempt->session_answer_data = $answerDataByQuestion;
+            $attempt->committed_questions = array_values(array_unique($committed));
+            $attempt->current_question = $index;
+            $attempt->save();
+        }
+
+        $questionScore = ExamScoreCalculator::evaluate(
+            collect([$question]),
+            [$questionId => $answers[$questionId] ?? 1],
+            [$questionId => $answerDataByQuestion[$questionId] ?? $normalizedMatches],
+            [0],
+            (float) $exam->pass_percentage
+        )['question_results'][$questionId] ?? [];
+        $feedback = $this->dragDropFeedbackForQuestion($question, (array) ($answerDataByQuestion[$questionId] ?? $normalizedMatches));
+        $liveScore = $this->liveScoreForAttempt($exam, $attempt, $allQuestionIds, $flowIds);
+
+        return response()->json([
+            'success' => true,
+            'is_correct' => (bool) ($questionScore['is_correct'] ?? false),
+            'correct_matches' => $feedback['correct_matches'],
+            'slot_results' => $feedback['slot_results'],
+            'live_score' => $liveScore,
+        ]);
+    }
+
     public function question($id, $index) {
         $attendExam = $this->activeAttempt($id);
         $exam = Exam::active()->running()->whereKey($attendExam->exam_id)->firstOrFail();
@@ -294,6 +389,10 @@ class ExamController extends Controller {
         $questionIndex = $index;
         $globalIndex = array_search((string) $question->id, $allQuestionIds, true);
         $revealed = $globalIndex !== false && in_array((int) $globalIndex, array_map('intval', (array) ($attendExam->revealed_questions ?? [])), true);
+        $committed = $globalIndex !== false && in_array((int) $globalIndex, array_map('intval', (array) ($attendExam->committed_questions ?? [])), true);
+        $dragFeedback = $committed && $question->question_type === 'drag_drop'
+            ? $this->dragDropFeedbackForQuestion($question, (array) $savedDragData)
+            : null;
 
         $settings = $attendExam->exam_settings
             ? $this->settingsForAttempt($attendExam)
@@ -306,9 +405,10 @@ class ExamController extends Controller {
             'question_id' => $question->id,
             'answered' => $savedAnswer !== null || !blank($savedDragData),
             'html' => view('Template::user.exams.partials.question', compact(
-                'exam', 'question', 'questionIndex', 'savedAnswer', 'savedDragData', 'revealed', 'showAnswers'
+                'exam', 'question', 'questionIndex', 'savedAnswer', 'savedDragData', 'revealed', 'showAnswers', 'dragFeedback'
             ))->render(),
             'revealed' => $revealed,
+            'committed' => $committed,
         ]);
     }
 

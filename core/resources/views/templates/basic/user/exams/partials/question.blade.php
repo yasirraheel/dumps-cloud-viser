@@ -91,7 +91,7 @@
     @endif
 
     @if ($type === 'drag_drop')
-        <div class="drag-question drag-drop-container" data-drag-question="{{ $question->id }}">
+        <div class="drag-question drag-drop-container" data-drag-question="{{ $question->id }}" data-drag-feedback="{{ json_encode($dragFeedback ?? null) }}">
             <div class="drag-drop-layout">
                 <div class="drag-pool-column">
                     <div class="column-header"><span class="column-title">📋 @lang('Available items')</span><span class="column-count drag-item-count">{{ count($dragItems) }} @lang('left')</span></div>
@@ -115,6 +115,7 @@
                     </div>
                 </div>
             </div>
+            <div class="drag-answer-feedback" role="status" aria-live="polite" hidden></div>
             <div class="dd-confirm-wrapper"><button type="button" class="btn btn-ui btn-confirm-dd drag-confirm"><span class="drag-action-icon" aria-hidden="true">✓</span><span>@lang('Confirm Drag & Drop Matches') (<span class="drag-confirm-count">0/{{ count($dragTargets) }}</span>)</span></button></div>
             <input type="hidden" name="answer[{{ $question->id }}]" value="1"><input type="hidden" name="answer_data[{{ $question->id }}]" class="drag-answer-data" value='@json($savedDragData)'>
         </div>

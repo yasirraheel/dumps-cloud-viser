@@ -81,6 +81,7 @@ Route::middleware('auth')->name('user.')->group(function () {
                 Route::post('delete/{id}', 'deleteAttempt')->name('delete');
                 Route::get('attempt/{id}/question/{index}', 'question')->name('question');
                 Route::post('attempt/{id}/answer/{index}', 'revealAnswer')->name('answer.reveal');
+                Route::post('attempt/{id}/confirm-drag-drop/{index}', 'confirmDragDrop')->name('drag-drop.confirm');
                 Route::post('attempt/{id}/session', 'saveSession')->name('session.save');
                 Route::post('attempt/{id}/submit', 'submit')->name('submit');
                 Route::get('certificate/download/{slug}', 'certificateDownload')->name('certificate.download');

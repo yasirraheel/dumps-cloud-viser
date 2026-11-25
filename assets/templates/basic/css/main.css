@@ -9343,6 +9343,16 @@ html:has(.exam-take-page) {
 .drag-drop-container .target-slot-card.filled {
   border-style:solid
 }
+.drag-drop-container .target-slot-card.is-match-correct {
+  background:hsl(var(--success)/.08);
+  border-color:hsl(var(--success));
+  border-style:solid
+}
+.drag-drop-container .target-slot-card.is-match-wrong,.drag-drop-container .target-slot-card.is-match-missing {
+  background:hsl(var(--danger)/.08);
+  border-color:hsl(var(--danger));
+  border-style:solid
+}
 .drag-drop-container .target-label {
   align-items:flex-start;
   color:hsl(var(--base));
@@ -9390,6 +9400,48 @@ html:has(.exam-take-page) {
 .drag-drop-container .assigned-text {
   flex:1;
   overflow-wrap:anywhere
+}
+.drag-drop-container .drag-match-indicator {
+  flex:0 0 auto;
+  font-size:1.1rem;
+  font-weight:800;
+  line-height:1
+}
+.drag-drop-container .drag-match-indicator.is-correct {
+  color:hsl(var(--success))
+}
+.drag-drop-container .drag-match-indicator.is-wrong {
+  color:hsl(var(--danger))
+}
+.drag-drop-container .drag-slot-correction {
+  color:hsl(var(--danger));
+  font-size:.86rem;
+  line-height:1.45
+}
+.drag-drop-container .drag-slot-correction strong {
+  color:hsl(var(--success));
+  margin-right:5px
+}
+.drag-drop-container .drag-answer-feedback {
+  border:1px solid hsl(var(--border-color));
+  border-radius:7px;
+  font-size:.92rem;
+  font-weight:700;
+  margin-top:14px;
+  padding:10px 13px
+}
+.drag-drop-container .drag-answer-feedback[hidden] {
+  display:none
+}
+.drag-drop-container .drag-answer-feedback.is-correct {
+  background:hsl(var(--success)/.1);
+  border-color:hsl(var(--success)/.65);
+  color:hsl(var(--success))
+}
+.drag-drop-container .drag-answer-feedback.is-wrong {
+  background:hsl(var(--danger)/.1);
+  border-color:hsl(var(--danger)/.65);
+  color:hsl(var(--danger))
 }
 .drag-drop-container .remove-item-btn {
   background:transparent;

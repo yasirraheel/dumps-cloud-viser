@@ -142,40 +142,59 @@ class ExamScoreCalculator
         return $ids;
     }
 
-    private static function dragDropIsCorrect(array $data, array $submitted): bool
+    public static function dragDropSlotResults(array $data, array $submitted): array
     {
         $correct = self::toArray($data['correctMatches'] ?? []);
         $targets = array_values((array) ($data['targets'] ?? array_keys($correct)));
-        if (!$targets || !$correct) {
-            return false;
-        }
-
         $expectedByGroup = [];
         foreach ($targets as $target) {
             $target = (string) $target;
             $item = $correct[$target] ?? null;
-            if (!is_scalar($item) || (string) $item === '') {
-                return false;
+            if (is_scalar($item) && (string) $item !== '') {
+                $expectedByGroup[self::targetGroup($target)][] = (string) $item;
             }
-            $group = self::targetGroup($target);
-            $expectedByGroup[$group][] = (string) $item;
         }
 
+        $results = [];
         foreach ($targets as $target) {
             $target = (string) $target;
             $item = $submitted[$target] ?? null;
+            $correctItem = $correct[$target] ?? null;
             if (!is_scalar($item) || (string) $item === '') {
-                return false;
+                $results[$target] = [
+                    'status' => 'missing',
+                    'correct_item' => is_scalar($correctItem) ? (string) $correctItem : null,
+                ];
+                continue;
             }
+
             $group = self::targetGroup($target);
             $matchIndex = array_search((string) $item, $expectedByGroup[$group] ?? [], true);
             if ($matchIndex === false) {
-                return false;
+                $results[$target] = [
+                    'status' => 'wrong',
+                    'correct_item' => is_scalar($correctItem) ? (string) $correctItem : null,
+                    'submitted_item' => (string) $item,
+                ];
+                continue;
             }
+
             array_splice($expectedByGroup[$group], $matchIndex, 1);
+            $results[$target] = [
+                'status' => 'correct',
+                'correct_item' => is_scalar($correctItem) ? (string) $correctItem : null,
+                'submitted_item' => (string) $item,
+            ];
         }
 
-        return true;
+        return $results;
+    }
+
+    private static function dragDropIsCorrect(array $data, array $submitted): bool
+    {
+        $results = self::dragDropSlotResults($data, $submitted);
+        return count($results) > 0
+            && collect($results)->every(fn ($result) => ($result['status'] ?? null) === 'correct');
     }
 
     private static function targetGroup(string $target): string

@@ -26,7 +26,7 @@
                 <div class="exam-flow-layout">
                     <main class="exam-flow-main">
                         <div id="examQuestionContainer">
-                            @include('Template::user.exams.partials.question', ['question' => $question, 'questionIndex' => $sessionIndex, 'savedAnswer' => $savedAnswer, 'savedDragData' => $savedDragData, 'revealed' => in_array($sessionIndex, $sessionRevealed)])
+                            @include('Template::user.exams.partials.question', ['question' => $question, 'questionIndex' => $sessionIndex, 'savedAnswer' => $savedAnswer, 'savedDragData' => $savedDragData, 'revealed' => in_array($sessionIndex, $sessionRevealed), 'dragFeedback' => $dragFeedback])
                         </div>
 
                         <div class="exam-flow-footer"><button type="button" class="btn btn--dark" id="previousQuestion"><i class="las la-arrow-left" aria-hidden="true"></i><span>@lang('Previous')</span></button><div class="exam-flow-center-actions">@if ($showAnswers)<button type="button" class="btn btn--sm btn-outline--info" id="showAnswer"><i class="las la-lightbulb" aria-hidden="true"></i><span>@lang('Show Answer')</span></button>@endif<button type="button" class="btn btn--sm btn-outline--warning" id="markReview"><i class="las la-flag"></i><span>@lang('Mark for Review')</span></button></div><div class="exam-flow-navigation"><button type="button" class="btn btn--base" id="nextQuestion">@lang('Next')</button><button type="submit" class="btn btn--base d-none" id="submitExam">@lang('Submit Exam')</button></div></div>
@@ -127,6 +127,7 @@
                 const totalQuestions=Number(@json($questionCount));
                 const questionUrl='{{ route('user.exam.question', ['id' => $attendExam->id, 'index' => '__INDEX__'], false) }}';
                 const answerUrl='{{ route('user.exam.answer.reveal', ['id' => $attendExam->id, 'index' => '__INDEX__'], false) }}';
+                const dragConfirmUrl='{{ route('user.exam.drag-drop.confirm', ['id' => $attendExam->id, 'index' => '__INDEX__'], false) }}';
                 const saveUrl='{{ route('user.exam.session.save', $attendExam->id, false) }}';
                 const csrfToken=document.querySelector('meta[name="csrf-token"]')?.content||'{{ csrf_token() }}';
                 const inlineFeedback=@json((bool) ($settings['inline_feedback'] ?? false));
@@ -138,6 +139,7 @@
                 let answeredIndexes=new Set((@json($answeredIndexes)||[]).map(Number));
                 let secondsRemaining=@json($sessionRemaining);
                 let timerPaused=Boolean(@json($sessionPaused))||document.hidden,loading=false,submitting=false,submittedByTimer=false;
+                let sessionSaveQueue=Promise.resolve(),dragConfirmationPending=false;
                 const step=()=>container?.querySelector('.exam-step');
                 function hasAnswer(node=step()){
                     if(!node)return false;
@@ -197,12 +199,20 @@
                 pauseButton?.addEventListener('click',()=>setPaused(true));
                 resumeButton?.addEventListener('click',()=>setPaused(false));
                 async function persistSession(){
-                    if(!saveUrl||!form||!step())return null;
+                    if(!saveUrl||!form||!step()||dragConfirmationPending)return null;
                     try{
-                        const response=await fetch(saveUrl,{method:'POST',keepalive:true,headers:{'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':csrfToken,'Cache-Control':'no-cache'},body:JSON.stringify(sessionPayload())});
+                        sessionSaveQueue=sessionSaveQueue.catch(()=>null).then(()=>fetch(saveUrl,{method:'POST',keepalive:true,headers:{'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':csrfToken,'Cache-Control':'no-cache'},body:JSON.stringify(sessionPayload())}).catch(()=>null));
+                        const response=await sessionSaveQueue;
                         if(!response.ok)return null;
                         const payload=await response.json();updateScore(payload.live_score);return payload;
                     }catch(error){return null}
+                }
+                async function flushSessionSaves(){
+                    while(true){
+                        const pending=sessionSaveQueue;
+                        await pending;
+                        if(pending===sessionSaveQueue)return;
+                    }
                 }
                 function keepQuestionInView(){
                     const rect=container.getBoundingClientRect();
@@ -280,7 +290,213 @@
                         renderFeedback(result,payload);updateScore(result.live_score);refresh();await persistSession();return true;
                     }catch(error){notify('error','@lang('Unable to check this answer. Please try again.')');return false}
                 }
-                function bindDrag(){const question=document.querySelector('.drag-question');if(!question)return;const hidden=question.querySelector('.drag-answer-data'),answerInput=question.querySelector('input[name^="answer["]'),initial=JSON.parse(hidden?.value||'{}'),placements={...initial},items=[...question.querySelectorAll('.drag-item')],targets=[...question.querySelectorAll('.drag-target')];let selected=null,dragged=null;const targetForItem=item=>Object.keys(placements).find(target=>placements[target]===item)||null;const render=()=>{const assigned=Object.values(placements),count=Object.keys(placements).length,confirmed=committed.has(current);items.forEach(item=>{const placed=assigned.includes(item.dataset.item);item.classList.toggle('is-placed',placed);item.classList.toggle('is-assigned',placed);item.classList.toggle('is-selected',selected===item.dataset.item&&!placed);item.draggable=!placed&&!confirmed});targets.forEach(target=>{const name=target.dataset.target,item=placements[name],slot=target.querySelector('.drag-target-slot');target.classList.toggle('ready-for-drop',Boolean(selected&&!item));target.classList.toggle('filled',Boolean(item));if(item){slot.innerHTML='<div class="assigned-item"><span class="assigned-text"></span><button type="button" class="remove-item-btn" title="@lang('Remove item')" '+(confirmed?'disabled':'')+'>✕</button></div>';slot.querySelector('.assigned-text').textContent=item;slot.querySelector('.remove-item-btn').addEventListener('click',event=>{event.stopPropagation();if(confirmed)return;delete placements[name];selected=null;render()})}else slot.innerHTML='<span class="drop-placeholder"><span class="empty-hint">@lang('Drop item here')</span></span>';target.setAttribute('aria-disabled',confirmed?'true':'false')});question.querySelector('.drag-item-count').textContent=(items.length-count)+' @lang('left')';question.querySelector('.drag-match-count').textContent=count+' / '+targets.length+' @lang('assigned')';question.querySelector('.drag-confirm-count').textContent=count+'/'+targets.length;question.querySelector('.drag-reset').classList.toggle('d-none',count===0||confirmed);const confirmButton=question.querySelector('.drag-confirm');confirmButton.disabled=confirmed||count===0;confirmButton.innerHTML=confirmed?'<span class="drag-action-icon" aria-hidden="true">✓</span><span>@lang('Matches confirmed')</span>':'<span class="drag-action-icon" aria-hidden="true">✓</span><span>@lang('Confirm Drag & Drop Matches') (<span class="drag-confirm-count">'+count+'/'+targets.length+'</span>)</span>';hidden.value=JSON.stringify(placements);if(answerInput)answerInput.value=count?'1':'';answeredIndexes[count?'add':'delete'](current);refresh();persistSession()};const place=(name,item)=>{if(committed.has(current)||!item||!items.some(source=>source.dataset.item===item))return;const old=targetForItem(item);if(old&&old!==name)delete placements[old];if(placements[name]){const displaced=placements[name];const displacedTarget=targetForItem(displaced);if(displacedTarget)delete placements[displacedTarget]}placements[name]=item;selected=null;render()};items.forEach(item=>{item.addEventListener('dragstart',event=>{if(committed.has(current)||item.classList.contains('is-placed')){event.preventDefault();return}dragged=item.dataset.item;event.dataTransfer.effectAllowed='move';event.dataTransfer.setData('text/plain',dragged)});item.addEventListener('dragend',()=>{dragged=null;targets.forEach(target=>target.classList.remove('is-over'))});item.addEventListener('click',()=>{if(committed.has(current))return;if(item.classList.contains('is-placed')){const target=targetForItem(item.dataset.item);if(target){delete placements[target];render()}return}selected=selected===item.dataset.item?null:item.dataset.item;render()})});targets.forEach(target=>{target.addEventListener('dragover',event=>{if(committed.has(current))return;event.preventDefault();target.classList.add('is-over')});target.addEventListener('dragleave',()=>target.classList.remove('is-over'));target.addEventListener('drop',event=>{if(committed.has(current))return;event.preventDefault();target.classList.remove('is-over');place(target.dataset.target,event.dataTransfer.getData('text/plain')||dragged)});target.addEventListener('click',()=>{if(committed.has(current))return;if(selected)place(target.dataset.target,selected);else if(placements[target.dataset.target]){delete placements[target.dataset.target];render()}})});question.querySelector('.drag-reset').addEventListener('click',()=>{if(committed.has(current))return;Object.keys(placements).forEach(key=>delete placements[key]);selected=null;render()});question.querySelector('.drag-confirm')?.addEventListener('click',()=>{if(!Object.keys(placements).length)return;committed.add(current);question.classList.add('is-confirmed');render()});render()}
+                function bindDrag(){
+                    const question=document.querySelector('.drag-question');
+                    if(!question)return;
+                    const hidden=question.querySelector('.drag-answer-data');
+                    const answerInput=question.querySelector('input[name^="answer["]');
+                    const initial=JSON.parse(hidden?.value||'{}');
+                    const placements={...initial};
+                    const items=[...question.querySelectorAll('.drag-item')];
+                    const targets=[...question.querySelectorAll('.drag-target')];
+                    const confirmButton=question.querySelector('.drag-confirm');
+                    const feedbackBox=question.querySelector('.drag-answer-feedback');
+                    let selected=null,dragged=null,checking=false,feedback=null;
+                    try{feedback=JSON.parse(question.dataset.dragFeedback||'null')}catch(error){feedback=null}
+                    const targetForItem=item=>Object.keys(placements).find(target=>placements[target]===item)||null;
+                    const render=(persist=true)=>{
+                        const assigned=Object.values(placements),count=Object.keys(placements).length,confirmed=committed.has(current);
+                        items.forEach(item=>{
+                            const placed=assigned.includes(item.dataset.item);
+                            item.classList.toggle('is-placed',placed);
+                            item.classList.toggle('is-assigned',placed);
+                            item.classList.toggle('is-selected',selected===item.dataset.item&&!placed);
+                            item.draggable=!placed&&!confirmed&&!checking;
+                        });
+                        targets.forEach(target=>{
+                            const name=target.dataset.target,item=placements[name],slot=target.querySelector('.drag-target-slot');
+                            const slotResult=feedback?.slot_results?.[name];
+                            const status=slotResult?.status||'';
+                            target.classList.toggle('ready-for-drop',Boolean(selected&&!item&&!confirmed&&!checking));
+                            target.classList.toggle('filled',Boolean(item));
+                            target.classList.toggle('is-match-correct',status==='correct');
+                            target.classList.toggle('is-match-wrong',status==='wrong');
+                            target.classList.toggle('is-match-missing',status==='missing');
+                            if(item){
+                                const wrapper=document.createElement('div');
+                                wrapper.className='assigned-item'+(status==='correct'?' is-match-correct':status==='wrong'?' is-match-wrong':'');
+                                const text=document.createElement('span');
+                                text.className='assigned-text';
+                                text.textContent=item;
+                                wrapper.append(text);
+                                if(status==='correct'||status==='wrong'){
+                                    const indicator=document.createElement('span');
+                                    indicator.className='drag-match-indicator '+(status==='correct'?'is-correct':'is-wrong');
+                                    indicator.setAttribute('aria-label',status==='correct'?'@lang('Correct')':'@lang('Incorrect')');
+                                    indicator.textContent=status==='correct'?'✓':'✕';
+                                    wrapper.append(indicator);
+                                }
+                                if(!confirmed){
+                                    const remove=document.createElement('button');
+                                    remove.type='button';
+                                    remove.className='remove-item-btn';
+                                    remove.title='@lang('Remove item')';
+                                    remove.textContent='✕';
+                                    remove.addEventListener('click',event=>{
+                                        event.stopPropagation();
+                                        if(checking||committed.has(current))return;
+                                        delete placements[name];
+                                        selected=null;
+                                        render();
+                                    });
+                                    wrapper.append(remove);
+                                }
+                                slot.replaceChildren(wrapper);
+                            }else{
+                                const placeholder=document.createElement('span');
+                                placeholder.className='drop-placeholder drag-placeholder';
+                                placeholder.innerHTML='<span class="empty-hint">@lang('Drop item here')</span>';
+                                slot.replaceChildren(placeholder);
+                            }
+                            target.setAttribute('aria-disabled',confirmed||checking?'true':'false');
+                            target.querySelector('.drag-slot-correction')?.remove();
+                            if(status!=='correct'&&slotResult?.correct_item){
+                                const correction=document.createElement('div');
+                                correction.className='drag-slot-correction';
+                                const label=document.createElement('strong');
+                                label.textContent='@lang('Correct:')';
+                                const correctText=document.createElement('span');
+                                correctText.textContent=slotResult.correct_item;
+                                correction.append(label,correctText);
+                                target.append(correction);
+                            }
+                        });
+                        question.querySelector('.drag-item-count').textContent=(items.length-count)+' @lang('left')';
+                        question.querySelector('.drag-match-count').textContent=count+' / '+targets.length+' @lang('assigned')';
+                        question.querySelector('.drag-confirm-count').textContent=count+'/'+targets.length;
+                        question.querySelector('.drag-reset').classList.toggle('d-none',count===0||committed.has(current)||checking);
+                        if(confirmButton){
+                            const confirmed=committed.has(current);
+                            confirmButton.disabled=checking||confirmed||count===0;
+                            confirmButton.innerHTML=checking
+                                ? '<span class="drag-action-icon" aria-hidden="true">…</span><span>@lang('Checking matches...')</span>'
+                                : confirmed
+                                    ? '<span class="drag-action-icon" aria-hidden="true">✓</span><span>@lang('Matches confirmed')</span>'
+                                    : '<span class="drag-action-icon" aria-hidden="true">✓</span><span>@lang('Confirm Drag & Drop Matches') (<span class="drag-confirm-count">'+count+'/'+targets.length+'</span>)</span>';
+                        }
+                        if(feedbackBox){
+                            feedbackBox.hidden=!feedback;
+                            feedbackBox.className='drag-answer-feedback'+(feedback?(feedback.is_correct?' is-correct':' is-wrong'):'');
+                            feedbackBox.textContent=feedback
+                                ? (feedback.is_correct?'✓ @lang('Correct')':'✕ @lang('Incorrect. Correct matches are shown below.')')
+                                : '';
+                        }
+                        hidden.value=JSON.stringify(placements);
+                        if(answerInput)answerInput.value=count?'1':'';
+                        answeredIndexes[count?'add':'delete'](current);
+                        refresh();
+                        if(persist)persistSession();
+                    };
+                    const place=(name,item)=>{
+                        if(checking||committed.has(current)||!item||!items.some(source=>source.dataset.item===item))return;
+                        const old=targetForItem(item);
+                        if(old&&old!==name)delete placements[old];
+                        if(placements[name]){
+                            const displaced=placements[name];
+                            const displacedTarget=targetForItem(displaced);
+                            if(displacedTarget)delete placements[displacedTarget];
+                        }
+                        placements[name]=item;
+                        selected=null;
+                        render();
+                    };
+                    async function confirmMatches(){
+                        if(checking||committed.has(current)||!Object.keys(placements).length)return;
+                        const confirmedIndex=current;
+                        checking=true;
+                        loading=true;
+                        dragConfirmationPending=true;
+                        render(false);
+                        const submitted={...placements};
+                        try{
+                            await flushSessionSaves();
+                            const response=await fetch(dragConfirmUrl.replace('__INDEX__',String(confirmedIndex)),{
+                                method:'POST',
+                                headers:{'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':csrfToken,'X-Requested-With':'XMLHttpRequest'},
+                                body:JSON.stringify({answer:1,answer_data:submitted})
+                            });
+                            if(!response.ok)throw new Error('Unable to confirm these matches.');
+                            const result=await response.json();
+                            if(!result.success)throw new Error('Unable to confirm these matches.');
+                            feedback=result;
+                            committed.add(confirmedIndex);
+                            answeredIndexes.add(confirmedIndex);
+                            if(result.is_correct)incorrectIndexes.delete(confirmedIndex);else incorrectIndexes.add(confirmedIndex);
+                            question.classList.add('is-confirmed');
+                            checking=false;
+                            loading=false;
+                            dragConfirmationPending=false;
+                            render(false);
+                            updateScore(result.live_score);
+                        }catch(error){
+                            checking=false;
+                            loading=false;
+                            dragConfirmationPending=false;
+                            render(false);
+                            persistSession();
+                            notify('error','@lang('Unable to confirm these matches. Please try again.')');
+                        }
+                    }
+                    items.forEach(item=>{
+                        item.addEventListener('dragstart',event=>{
+                            if(checking||committed.has(current)||item.classList.contains('is-placed')){event.preventDefault();return}
+                            dragged=item.dataset.item;
+                            event.dataTransfer.effectAllowed='move';
+                            event.dataTransfer.setData('text/plain',dragged);
+                        });
+                        item.addEventListener('dragend',()=>{
+                            dragged=null;
+                            targets.forEach(target=>target.classList.remove('is-over'));
+                        });
+                        item.addEventListener('click',()=>{
+                            if(checking||committed.has(current))return;
+                            if(item.classList.contains('is-placed')){
+                                const target=targetForItem(item.dataset.item);
+                                if(target){delete placements[target];render()}
+                                return;
+                            }
+                            selected=selected===item.dataset.item?null:item.dataset.item;
+                            render();
+                        });
+                    });
+                    targets.forEach(target=>{
+                        target.addEventListener('dragover',event=>{
+                            if(checking||committed.has(current))return;
+                            event.preventDefault();
+                            target.classList.add('is-over');
+                        });
+                        target.addEventListener('dragleave',()=>target.classList.remove('is-over'));
+                        target.addEventListener('drop',event=>{
+                            if(checking||committed.has(current))return;
+                            event.preventDefault();
+                            target.classList.remove('is-over');
+                            place(target.dataset.target,event.dataTransfer.getData('text/plain')||dragged);
+                        });
+                        target.addEventListener('click',()=>{
+                            if(checking||committed.has(current))return;
+                            if(selected)place(target.dataset.target,selected);
+                            else if(placements[target.dataset.target]){delete placements[target.dataset.target];render()}
+                        });
+                    });
+                    question.querySelector('.drag-reset').addEventListener('click',()=>{
+                        if(checking||committed.has(current))return;
+                        Object.keys(placements).forEach(key=>delete placements[key]);
+                        selected=null;
+                        render();
+                    });
+                    confirmButton?.addEventListener('click',confirmMatches);
+                    render();
+                }
                 function bindImageViewers(root){
                     root.querySelectorAll('[data-exam-image-viewer]').forEach(viewer=>{
                         if(viewer.dataset.zoomBound)return;
@@ -400,7 +616,7 @@
                 window.addEventListener('blur',()=>setPaused(true));
                 window.addEventListener('pagehide',()=>setPaused(true));
                 form?.addEventListener('submit',async event=>{if(submittedByTimer)return;event.preventDefault();if(submitting)return;submitting=true;form.querySelectorAll('button[type="submit"]').forEach(button=>{button.disabled=true;button.innerHTML='<i class="las la-spinner la-spin"></i> @lang('Submitting...')'});await persistSession();HTMLFormElement.prototype.submit.call(form)});
-                function tick(){if(secondsRemaining===null||secondsRemaining===undefined||timerPaused)return;if(Number(secondsRemaining)<=0){if(!submittedByTimer){submittedByTimer=true;persistSession().finally(()=>HTMLFormElement.prototype.submit.call(form))}return}secondsRemaining=Number(secondsRemaining)-1;renderClock();if(secondsRemaining%5===0)persistSession()}
+                function tick(){if(secondsRemaining===null||secondsRemaining===undefined||timerPaused||dragConfirmationPending)return;if(Number(secondsRemaining)<=0){if(!submittedByTimer){submittedByTimer=true;persistSession().finally(()=>HTMLFormElement.prototype.submit.call(form))}return}secondsRemaining=Number(secondsRemaining)-1;renderClock();if(secondsRemaining%5===0)persistSession()}
                 bindCurrent();renderClock();updatePauseDialog();if(timerPaused)persistSession();if(secondsRemaining!==null&&secondsRemaining!==undefined){tick();setInterval(tick,1000)}
                 if(revealed.has(current))revealCurrent();
             })();
