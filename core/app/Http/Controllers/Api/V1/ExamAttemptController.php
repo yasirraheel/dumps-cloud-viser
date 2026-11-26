@@ -267,10 +267,10 @@ class ExamAttemptController extends Controller
             'committed_flow_indices' => array_values($committedFlowIndices),
             'incorrect_flow_indices' => array_values($incorrectFlowIndices),
             'live_score' => [
-                'correct' => (int) $liveScore['correct'],
-                'total_questions' => (int) $liveScore['total_questions'],
-                'percentage' => (float) $liveScore['percentage'],
-                'evaluated' => (int) $liveScore['evaluated'],
+                'correct' => (int) ($liveScore['correct'] ?? 0),
+                'total_questions' => (int) ($liveScore['total_questions'] ?? 0),
+                'percentage' => (float) ($liveScore['percentage'] ?? 0),
+                'evaluated' => (int) ($liveScore['evaluated'] ?? $liveScore['answered'] ?? 0),
             ],
             'drag_feedback_by_question_id' => (object) $dragFeedbackByQuestionId,
         ]);
@@ -325,10 +325,10 @@ class ExamAttemptController extends Controller
 
         return $this->ok([
             'live_score' => [
-                'correct' => (int) $live['correct'],
-                'total_questions' => (int) $live['total_questions'],
-                'percentage' => (float) $live['percentage'],
-                'evaluated' => (int) $live['evaluated'],
+                'correct' => (int) ($live['correct'] ?? 0),
+                'total_questions' => (int) ($live['total_questions'] ?? 0),
+                'percentage' => (float) ($live['percentage'] ?? 0),
+                'evaluated' => (int) ($live['evaluated'] ?? $live['answered'] ?? 0),
             ],
         ]);
     }
@@ -436,10 +436,10 @@ class ExamAttemptController extends Controller
             'is_correct' => (bool) ($qResult['is_correct'] ?? false),
             'explanation' => $formatted['explanation'],
             'live_score' => [
-                'correct' => (int) $live['correct'],
-                'total_questions' => (int) $live['total_questions'],
-                'percentage' => (float) $live['percentage'],
-                'evaluated' => (int) $live['evaluated'],
+                'correct' => (int) ($live['correct'] ?? 0),
+                'total_questions' => (int) ($live['total_questions'] ?? 0),
+                'percentage' => (float) ($live['percentage'] ?? 0),
+                'evaluated' => (int) ($live['evaluated'] ?? $live['answered'] ?? 0),
             ],
         ]);
     }
