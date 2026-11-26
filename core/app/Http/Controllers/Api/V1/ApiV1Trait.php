@@ -186,10 +186,9 @@ trait ApiV1Trait
 
     protected function formatCertificate(GetCertificateUser $cert): array
     {
-        $cert->loadMissing(['attendExam.exam.category', 'user']);
-        $attempt = $cert->attendExam;
+        $attempt = AttendExam::with('exam.category')->find($cert->attend_exam_id);
         $exam = $attempt?->exam;
-        $user = $cert->user;
+        $user = User::find($cert->user_id);
 
         return [
             'id' => (int) $cert->id,
