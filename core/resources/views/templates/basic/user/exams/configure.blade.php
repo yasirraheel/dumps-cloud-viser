@@ -41,12 +41,12 @@
                                     <input type="hidden" name="mode" id="examModeValue" value="{{ $examSettings['mode'] }}">
                                     <div class="row g-2">
                                         <div class="col-12 col-md-6">
-                                            <button type="button" class="btn form--control sm-style w-100 text-start exam-mode-option {{ $examSettings['mode'] === 'study' ? 'text--base' : '' }}" data-exam-mode="study">
+                                            <button type="button" class="btn w-100 text-start exam-mode-option {{ $examSettings['mode'] === 'study' ? 'is-active text--base' : '' }}" data-exam-mode="study" aria-pressed="{{ $examSettings['mode'] === 'study' ? 'true' : 'false' }}">
                                                 <i class="las la-book-open me-1" aria-hidden="true"></i><span>@lang('Study mode')</span>
                                             </button>
                                         </div>
                                         <div class="col-12 col-md-6">
-                                            <button type="button" class="btn form--control sm-style w-100 text-start exam-mode-option {{ $examSettings['mode'] === 'simulation' ? 'text--base' : '' }}" data-exam-mode="simulation">
+                                            <button type="button" class="btn w-100 text-start exam-mode-option {{ $examSettings['mode'] === 'simulation' ? 'is-active text--base' : '' }}" data-exam-mode="simulation" aria-pressed="{{ $examSettings['mode'] === 'simulation' ? 'true' : 'false' }}">
                                                 <i class="las la-stopwatch me-1" aria-hidden="true"></i><span>@lang('Simulation mode')</span>
                                             </button>
                                         </div>
@@ -118,6 +118,8 @@
             const modeButtons = document.querySelectorAll('[data-exam-mode]');
             const timerValue = document.getElementById('timerValue');
             const timerLabel = document.getElementById('timerLabel');
+            const timerTrigger = document.getElementById('timerTrigger');
+            const timerMenu = document.getElementById('examTimerMenu');
             const randomizeQuestions = document.getElementById('randomizeQuestions');
             const questionOrder = document.getElementById('questionOrder');
             const showLiveScore = document.getElementById('showLiveScore');
@@ -136,8 +138,21 @@
             const applyMode = (mode) => {
                 const simulation = mode === 'simulation';
                 modeValue.value = mode;
-                modeButtons.forEach((button) => button.classList.toggle('text--base', button.dataset.examMode === mode));
+                modeButtons.forEach((button) => {
+                    const active = button.dataset.examMode === mode;
+                    button.classList.toggle('is-active', active);
+                    button.classList.toggle('text--base', active);
+                    button.setAttribute('aria-pressed', active ? 'true' : 'false');
+                });
                 simulationNote.hidden = !simulation;
+                if (timerTrigger) {
+                    timerTrigger.disabled = simulation;
+                    if (simulation && timerMenu) {
+                        timerMenu.hidden = true;
+                        timerMenu.classList.remove('show');
+                        timerTrigger.setAttribute('aria-expanded', 'false');
+                    }
+                }
 
                 if (simulation) {
                     timerValue.value = '90_mins';

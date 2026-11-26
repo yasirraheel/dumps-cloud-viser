@@ -872,8 +872,10 @@ class ExamController extends Controller {
         if ($savedOrder) {
             $validIds = array_fill_keys($allQuestionIds, true);
             $savedOrder = array_values(array_unique(array_filter($savedOrder, fn ($id) => isset($validIds[$id]))));
-            $savedSet = array_fill_keys($savedOrder, true);
-            $savedOrder = array_merge($savedOrder, array_values(array_filter($allQuestionIds, fn ($id) => !isset($savedSet[$id]))));
+            if (($attendExam->exam_settings['mode'] ?? 'study') !== 'simulation') {
+                $savedSet = array_fill_keys($savedOrder, true);
+                $savedOrder = array_merge($savedOrder, array_values(array_filter($allQuestionIds, fn ($id) => !isset($savedSet[$id]))));
+            }
             $allQuestionIds = $savedOrder;
         }
 

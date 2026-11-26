@@ -9929,3 +9929,37 @@ html:has(.exam-take-page) {
     border-color: #7dff48 !important;
     box-shadow: 0 0 0 3px rgba(125, 255, 72, .22) !important;
 }
+
+.exam-mode-option {
+    align-items: center;
+    background-color: hsl(var(--white) / 0.04);
+    border: 1px solid hsl(var(--white) / 0.16);
+    border-radius: 8px;
+    color: hsl(var(--body-color)) !important;
+    display: flex;
+    font-size: 0.95rem;
+    font-weight: 600;
+    gap: 8px;
+    min-height: 44px;
+    padding: 10px 16px;
+    transition: all 0.15s ease;
+}
+
+.exam-mode-option:hover,
+.exam-mode-option:focus-visible {
+    background-color: hsl(var(--white) / 0.08);
+    border-color: hsl(var(--base) / 0.6);
+    color: hsl(var(--heading-color)) !important;
+}
+
+.exam-mode-option.is-active {
+    background-color: hsl(var(--base) / 0.14);
+    border-color: hsl(var(--base));
+    box-shadow: 0 0 0 1px hsl(var(--base) / 0.35);
+    color: hsl(var(--base)) !important;
+}
+
+.exam-mode-option:focus-visible {
+    outline: 2px solid hsl(var(--base));
+    outline-offset: 2px;
+}
