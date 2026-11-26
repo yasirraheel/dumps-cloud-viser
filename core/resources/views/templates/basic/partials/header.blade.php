@@ -57,8 +57,12 @@
                         <li class="nav-item {{ menuActive('pricing') }}">
                             <a class="nav-link" href="{{ route('pricing') }}">@lang('Pricing')</a>
                         </li>
-                        <li class="nav-item {{ menuActive('exams') }}">
-                            <a class="nav-link" href="{{ route('exams') }}">@lang('Exams')</a>
+                        <li class="nav-item dropdown {{ menuActive('exams') }}">
+                            <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">@lang('Exams')</a>
+                            <ul class="dropdown-menu">
+                                <li><a class="dropdown-item" href="{{ route('exams') }}">@lang('Exams')</a></li>
+                                <li><a class="dropdown-item" href="{{ route('user.exam.history') }}">@lang('Exam History')</a></li>
+                            </ul>
                         </li>
                         <li class="nav-item {{ menuActive('blog') }}">
                             <a class="nav-link" href="{{ route('blog') }}">@lang('Blog')</a>

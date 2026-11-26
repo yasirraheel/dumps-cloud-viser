@@ -6,7 +6,7 @@
             </div>
             <div class="exam-view-body">
                 <div class="exam-view-duration mb-3">
-                    <span class="value">{{ $exam->active_questions_count }} @lang('Questions')</span>
+                    <span class="value">{{ $exam->isAggregate() ? $exam->activeQuestionCount() : $exam->active_questions_count }} @lang('Questions')</span>
                     <span aria-hidden="true">·</span>
                     <span class="value">{{ getAmount($exam->pass_percentage) }}% @lang('Pass Mark')</span>
                 </div>

@@ -165,6 +165,7 @@ class ExamController extends Controller {
         }
 
         $validated = $request->validate([
+            'mode' => 'required|in:study,simulation',
             'question_order' => 'required|in:original,random',
             'randomize_options' => 'nullable|boolean',
             'show_score_live' => 'nullable|boolean',
@@ -174,6 +175,7 @@ class ExamController extends Controller {
         ]);
 
         $settings = [
+            'mode' => $validated['mode'],
             'question_order' => $validated['question_order'],
             'randomize_options' => $request->boolean('randomize_options'),
             'show_score_live' => $request->boolean('show_score_live'),
@@ -181,10 +183,26 @@ class ExamController extends Controller {
             'inline_feedback' => $request->boolean('inline_feedback'),
             'timer' => $validated['timer'],
         ];
-        $orderedIds = $settings['question_order'] === 'random'
-            ? collect($allQuestionIds)->shuffle()->values()->all()
-            : $allQuestionIds;
-        $questionOptions = Question::whereIn('id', $allQuestionIds)
+        if ($settings['mode'] === 'simulation') {
+            $simulationPercent = random_int(70, 80);
+            $simulationCount = $exam->isAggregate()
+                ? random_int(70, 80)
+                : max(1, (int) round(count($allQuestionIds) * ($simulationPercent / 100)));
+
+            $settings['question_order'] = 'random';
+            $settings['timer'] = '90_mins';
+            $settings['include_show_answer'] = false;
+            $settings['inline_feedback'] = false;
+            $settings['show_score_live'] = true;
+            $settings['simulation_percent'] = $simulationPercent;
+            $settings['simulation_count'] = min($simulationCount, count($allQuestionIds));
+            $orderedIds = collect($allQuestionIds)->shuffle()->take($settings['simulation_count'])->values()->all();
+        } else {
+            $orderedIds = $settings['question_order'] === 'random'
+                ? collect($allQuestionIds)->shuffle()->values()->all()
+                : $allQuestionIds;
+        }
+        $questionOptions = Question::whereIn('id', $orderedIds)
             ->with(['options' => fn ($query) => $query->active()->orderBy('id')])
             ->get()->keyBy(fn ($question) => (string) $question->id);
         $optionOrders = [];
@@ -471,18 +489,16 @@ class ExamController extends Controller {
 
     public function submit(Request $request, $id) {
         $submitExam = $this->activeAttempt($id);
-        $exam = Exam::active()->running()->whereKey($submitExam->exam_id)->withWhereHas('questions', function ($query) {
-            $query->active()->select([
-                'id', 'exam_id', 'title', 'question_type', 'answer_data', 'result_option_id'
-            ])->orderBy('sort_order')->orderBy('id')->with('options', function ($q) {
-                $q->active()->select(['id', 'question_id', 'title']);
-            });
-        })->firstOrFail();
+        $exam = Exam::active()->running()->whereKey($submitExam->exam_id)->firstOrFail();
 
         $allQuestionIds = $this->orderedQuestionIds($exam);
         $flowQuestionIds = $this->flowQuestionIds($allQuestionIds, $submitExam);
         $flowQuestionIdSet = array_fill_keys($flowQuestionIds, true);
-        $questionsById = $exam->questions->keyBy(fn ($question) => (string) $question->id);
+        $questionsById = $this->questionQuery($exam)->active()->select([
+            'id', 'exam_id', 'title', 'question_type', 'answer_data', 'result_option_id', 'sort_order'
+        ])->with('options', function ($q) {
+            $q->active()->select(['id', 'question_id', 'title']);
+        })->get()->keyBy(fn ($question) => (string) $question->id);
         $flowQuestions = collect($flowQuestionIds)
             ->map(fn ($questionId) => $questionsById->get($questionId))
             ->filter()
@@ -627,7 +643,7 @@ class ExamController extends Controller {
             }
 
             $allQuestions = collect($allQuestionIds)
-                ->map(fn ($questionId) => $exam->questions->firstWhere('id', (int) $questionId))
+                ->map(fn ($questionId) => $questionsById->get((string) $questionId))
                 ->filter()
                 ->values();
             $answerRows = $submitExam->examAnswer()->get();
@@ -659,17 +675,16 @@ class ExamController extends Controller {
         $attendExam = AttendExam::where('user_id', auth()->id())->findOrFail($id);
         abort_unless((int) $attendExam->is_submit === Status::YES, 404);
 
-        $exam = Exam::active()->running()->whereKey($attendExam->exam_id)->withWhereHas('questions', function ($query) {
-            $query->active()->select([
-                'id', 'exam_id', 'title', 'question_type', 'answer_data', 'result_option_id', 'sort_order'
-            ])->orderBy('sort_order')->orderBy('id')->with('options', function ($q) {
-                $q->active()->select(['id', 'question_id', 'title']);
-            });
-        })->firstOrFail();
+        $exam = Exam::active()->running()->whereKey($attendExam->exam_id)->firstOrFail();
 
         $allQuestionIds = $this->orderedQuestionIds($exam);
+        $questionsById = $this->questionQuery($exam)->active()->select([
+            'id', 'exam_id', 'title', 'question_type', 'answer_data', 'result_option_id', 'sort_order'
+        ])->with('options', function ($q) {
+            $q->active()->select(['id', 'question_id', 'title']);
+        })->get()->keyBy(fn ($question) => (string) $question->id);
         $questions = collect($allQuestionIds)
-            ->map(fn ($questionId) => $exam->questions->firstWhere('id', (int) $questionId))
+            ->map(fn ($questionId) => $questionsById->get((string) $questionId))
             ->filter()
             ->values();
         $answerRows = $attendExam->examAnswer()->get();
@@ -826,13 +841,29 @@ class ExamController extends Controller {
 
     private function orderedQuestionIds(Exam $exam): array
     {
-        return $exam->questions()
+        return $this->questionQuery($exam)
             ->active()
             ->orderBy('sort_order')
             ->orderBy('id')
             ->pluck('id')
             ->map(fn ($id) => (string) $id)
             ->all();
+    }
+
+    private function questionQuery(Exam $exam)
+    {
+        if (!$exam->isAggregate()) {
+            return $exam->questions();
+        }
+
+        $sourceIds = $exam->sourceExamIds();
+        $query = Question::query()->whereIn('exam_id', $sourceIds);
+
+        if ($sourceIds) {
+            $query->orderByRaw('FIELD(exam_id, ' . implode(',', array_map('intval', $sourceIds)) . ')');
+        }
+
+        return $query;
     }
 
     private function flowQuestionIds(array $allQuestionIds, AttendExam $attendExam): array
@@ -858,6 +889,7 @@ class ExamController extends Controller {
     private function defaultExamSettings(): array
     {
         return [
+            'mode' => 'study',
             'question_order' => 'original',
             'randomize_options' => false,
             'show_score_live' => true,
@@ -915,7 +947,7 @@ class ExamController extends Controller {
 
     private function liveScoreForAttempt(Exam $exam, AttendExam $attempt, array $allQuestionIds, array $flowQuestionIds, bool $includeQuestionResults = false): array
     {
-        $questions = $exam->questions()->active()
+        $questions = $this->questionQuery($exam)->active()
             ->orderBy('sort_order')->orderBy('id')
             ->select(['id', 'exam_id', 'title', 'question_type', 'answer_data', 'result_option_id', 'sort_order'])
             ->with('options', fn ($query) => $query->active()->select(['id', 'question_id', 'title']))
@@ -1018,7 +1050,7 @@ class ExamController extends Controller {
 
     private function loadQuestionById(Exam $exam, string $questionId)
     {
-        return $exam->questions()
+        return $this->questionQuery($exam)
             ->active()
             ->whereKey($questionId)
             ->select([
@@ -1033,7 +1065,7 @@ class ExamController extends Controller {
     }
 
     private function loadQuestion(Exam $exam, int $index) {
-        return $exam->questions()
+        return $this->questionQuery($exam)
             ->active()
             ->orderBy('sort_order')
             ->orderBy('id')
@@ -1096,8 +1128,8 @@ class ExamController extends Controller {
             : array_merge($this->defaultExamSettings(), ['timer' => 'legacy_duration']);
         $attemptTimerLabel = ($attemptSettings['timer'] ?? null) === 'legacy_duration'
             ? (int) $exam->duration . ' minutes'
-            : $this->timerLabel($attemptSettings, $exam->questions()->active()->count());
-        $questions = $exam->questions()
+            : $this->timerLabel($attemptSettings, $this->questionQuery($exam)->active()->count());
+        $questions = $this->questionQuery($exam)
             ->active()
             ->orderBy('sort_order')
             ->orderBy('id')

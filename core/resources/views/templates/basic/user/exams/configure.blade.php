@@ -3,6 +3,7 @@
 @section('content')
     @php
         $examSettings = array_merge([
+            'mode' => 'study',
             'question_order' => 'original',
             'randomize_options' => false,
             'show_score_live' => true,
@@ -35,6 +36,24 @@
                         <form action="{{ route('user.exam.begin', $exam->slug) }}" method="POST" data-exam-settings>
                             @csrf
                             <div class="card-body">
+                                <div class="mb-4">
+                                    <label class="form--label">@lang('Exam mode')</label>
+                                    <input type="hidden" name="mode" id="examModeValue" value="{{ $examSettings['mode'] }}">
+                                    <div class="row g-2">
+                                        <div class="col-12 col-md-6">
+                                            <button type="button" class="btn form--control sm-style w-100 text-start exam-mode-option {{ $examSettings['mode'] === 'study' ? 'text--base' : '' }}" data-exam-mode="study">
+                                                <i class="las la-book-open me-1" aria-hidden="true"></i><span>@lang('Study mode')</span>
+                                            </button>
+                                        </div>
+                                        <div class="col-12 col-md-6">
+                                            <button type="button" class="btn form--control sm-style w-100 text-start exam-mode-option {{ $examSettings['mode'] === 'simulation' ? 'text--base' : '' }}" data-exam-mode="simulation">
+                                                <i class="las la-stopwatch me-1" aria-hidden="true"></i><span>@lang('Simulation mode')</span>
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <small class="text--white" id="simulationNote" @if ($examSettings['mode'] !== 'simulation') hidden @endif>@lang('Simulation selects 70% to 80% random questions from this bank. The All Questions bank selects 70 to 80 questions from the complete pool and uses a 90 minute timer.')</small>
+                                </div>
+
                                 <div class="mb-4">
                                     <label class="form--label" for="timerLabel">@lang('Timer')</label>
                                     <input type="hidden" name="timer" id="timerValue" value="{{ $examSettings['timer'] }}">
@@ -93,4 +112,65 @@
 
 @push('script')
     <script src="{{ asset('assets/templates/basic/js/exam-dropdown.js') }}" defer></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const modeValue = document.getElementById('examModeValue');
+            const modeButtons = document.querySelectorAll('[data-exam-mode]');
+            const timerValue = document.getElementById('timerValue');
+            const timerLabel = document.getElementById('timerLabel');
+            const randomizeQuestions = document.getElementById('randomizeQuestions');
+            const questionOrder = document.getElementById('questionOrder');
+            const showLiveScore = document.getElementById('showLiveScore');
+            const includeShowAnswer = document.getElementById('includeShowAnswer');
+            const inlineFeedback = document.getElementById('inlineFeedback');
+            const simulationNote = document.getElementById('simulationNote');
+            const studyDefaults = {
+                timer: timerValue?.value,
+                timerLabel: timerLabel?.textContent,
+                randomizeQuestions: randomizeQuestions?.checked,
+                showLiveScore: showLiveScore?.checked,
+                includeShowAnswer: includeShowAnswer?.checked,
+                inlineFeedback: inlineFeedback?.checked,
+            };
+
+            const applyMode = (mode) => {
+                const simulation = mode === 'simulation';
+                modeValue.value = mode;
+                modeButtons.forEach((button) => button.classList.toggle('text--base', button.dataset.examMode === mode));
+                simulationNote.hidden = !simulation;
+
+                if (simulation) {
+                    timerValue.value = '90_mins';
+                    timerLabel.textContent = '@lang('90 minutes')';
+                    randomizeQuestions.checked = true;
+                    questionOrder.value = 'random';
+                    showLiveScore.checked = true;
+                    includeShowAnswer.checked = false;
+                    inlineFeedback.checked = false;
+                    randomizeQuestions.disabled = true;
+                    showLiveScore.disabled = true;
+                    includeShowAnswer.disabled = true;
+                    inlineFeedback.disabled = true;
+                } else {
+                    timerValue.value = studyDefaults.timer;
+                    timerLabel.textContent = studyDefaults.timerLabel;
+                    randomizeQuestions.checked = studyDefaults.randomizeQuestions;
+                    questionOrder.value = randomizeQuestions.checked ? 'random' : 'original';
+                    showLiveScore.checked = studyDefaults.showLiveScore;
+                    includeShowAnswer.checked = studyDefaults.includeShowAnswer;
+                    inlineFeedback.checked = studyDefaults.inlineFeedback;
+                    randomizeQuestions.disabled = false;
+                    showLiveScore.disabled = false;
+                    includeShowAnswer.disabled = false;
+                    inlineFeedback.disabled = false;
+                }
+            };
+
+            modeButtons.forEach((button) => button.addEventListener('click', () => applyMode(button.dataset.examMode)));
+            randomizeQuestions?.addEventListener('change', () => {
+                if (modeValue.value !== 'simulation') questionOrder.value = randomizeQuestions.checked ? 'random' : 'original';
+            });
+            applyMode(modeValue.value || 'study');
+        });
+    </script>
 @endpush
