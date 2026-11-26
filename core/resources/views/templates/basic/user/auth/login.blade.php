@@ -31,7 +31,7 @@
 
                 <div class="flex-between mb-4">
                     <div class="form--check gap-2">
-                        <input class="form-check-input" type="checkbox" id="remember"
+                        <input class="form-check-input" type="checkbox" name="remember" id="remember"
                                {{ old('remember') ? 'checked' : '' }}>
                         <div class="form-check-label">
                             <label for="remember">@lang('Remember Me')</label>
