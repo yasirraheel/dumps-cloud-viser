@@ -109,6 +109,8 @@ class ManageExamController extends Controller {
             $exam->save();
         });
 
+        Exam::ensureCategoryAll($categoryId);
+
         $notify[] = ['success', $message];
         return to_route('admin.exams.questions', $exam->id)->withNotify($notify);
 
