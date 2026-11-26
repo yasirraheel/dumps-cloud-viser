@@ -130,4 +130,38 @@ Route::namespace('Api')->name('api.')->group(function(){
 
         Route::get('logout', 'Auth\LoginController@logout');
     });
+
+    Route::prefix('v1')->namespace('V1')->group(function () {
+        Route::post('auth/login', 'AuthController@login');
+        Route::post('auth/register', 'AuthController@register');
+        Route::get('certificates/verify', 'PlanCertificateController@verifyCertificate');
+
+        Route::middleware('auth:sanctum')->group(function () {
+            Route::post('auth/logout', 'AuthController@logout');
+            Route::get('user/profile', 'AuthController@profile');
+            Route::put('user/profile', 'AuthController@updateProfile');
+            Route::put('user/exam-preferences', 'AuthController@saveExamPreferences');
+
+            Route::get('catalog', 'CatalogController@catalog');
+            Route::get('exams/{examId}', 'CatalogController@showExam');
+            Route::post('exams/{examId}/book', 'CatalogController@bookExam');
+            Route::post('exams/{examId}/attempts', 'ExamAttemptController@startAttempt');
+
+            Route::get('attempts', 'ExamAttemptController@history');
+            Route::get('attempts/{attemptId}/session', 'ExamAttemptController@session');
+            Route::patch('attempts/{attemptId}/state', 'ExamAttemptController@saveState');
+            Route::post('attempts/{attemptId}/confirm-drag', 'ExamAttemptController@confirmDragDrop');
+            Route::post('attempts/{attemptId}/reveal', 'ExamAttemptController@revealAnswer');
+            Route::post('attempts/{attemptId}/submit', 'ExamAttemptController@submit');
+            Route::get('attempts/{attemptId}/result', 'ExamAttemptController@result');
+            Route::get('attempts/{attemptId}/review', 'ExamAttemptController@review');
+            Route::post('attempts/{attemptId}/retake', 'ExamAttemptController@retake');
+            Route::delete('attempts/{attemptId}', 'ExamAttemptController@destroy');
+            Route::get('attempts/{attemptId}/certificate', 'PlanCertificateController@certificateForAttempt');
+
+            Route::get('plans', 'PlanCertificateController@plans');
+            Route::post('coupons/validate', 'PlanCertificateController@validateCoupon');
+            Route::post('plans/{planId}/subscribe', 'PlanCertificateController@subscribe');
+        });
+    });
 });
