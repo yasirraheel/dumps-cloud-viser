@@ -4,7 +4,7 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Constants\Status;
 use App\Http\Controllers\Controller;
-use App\Lib\ExamScoreCalculator;
+use App\Support\ExamScoreCalculator;
 use App\Models\AttendExam;
 use App\Models\Exam;
 use App\Models\ExamAnswer;
