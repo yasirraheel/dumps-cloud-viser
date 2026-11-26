@@ -167,6 +167,8 @@ trait ApiV1Trait
             'question_type' => $type,
             'explanation' => $question->explanationForDisplayedOptionOrder(),
             'cli_snippet' => $question->cli_snippet ?: null,
+            'exhibit_image_url' => $this->resolvePublicMediaUrl($question->exhibit_image),
+            'original_source_image_url' => $this->resolvePublicMediaUrl($question->original_source_image),
             'answer_metadata' => [
                 'correct_indices' => array_values($correctIndices),
                 'correct_option_ids' => array_values($correctOptionIds),
@@ -182,6 +184,18 @@ trait ApiV1Trait
                 'title' => (string) $opt->title,
             ])->values()->all(),
         ];
+    }
+
+    protected function resolvePublicMediaUrl(?string $path): ?string
+    {
+        $trimmed = trim((string) $path);
+        if ($trimmed === '') {
+            return null;
+        }
+        if (str_starts_with($trimmed, 'http://') || str_starts_with($trimmed, 'https://')) {
+            return $trimmed;
+        }
+        return url(ltrim($trimmed, '/'));
     }
 
     protected function formatCertificate(GetCertificateUser $cert): array
