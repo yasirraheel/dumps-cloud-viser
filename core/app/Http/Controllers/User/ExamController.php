@@ -1217,7 +1217,7 @@ class ExamController extends Controller {
 
         return response($pdf->output(), 200)
             ->header('Content-Type', 'application/pdf')
-            ->header('Content-Disposition', 'inline; filename="certificate.pdf"');
+            ->header('Content-Disposition', 'attachment; filename="certificate.pdf"');
     }
 
 }
