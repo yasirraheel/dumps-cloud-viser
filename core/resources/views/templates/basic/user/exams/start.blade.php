@@ -265,6 +265,9 @@
                     });
                     return Promise.race([request,timeout]).finally(()=>window.clearTimeout(timeoutId));
                 }
+                function waitForScorePaint(){
+                    return new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+                }
                 async function persistSession(){
                     if(!saveUrl||!form||!step()||dragConfirmationPending)return null;
                     try{
@@ -671,8 +674,15 @@
                     if(index!==current)attemptedIndexes.add(current);
                     loading=true;container.classList.add('is-loading');refresh();showActionLoader(actionTitle,'@lang('Your exam is being saved and the question is loading.')');
                     try{
-                        if(commitBeforeMove&&inlineFeedback&&hasAnswer()&&!revealed.has(current)){const committedOk=await revealCurrent(true);if(!committedOk)return}
-                        else await persistSession();
+                        if(commitBeforeMove&&inlineFeedback&&hasAnswer()&&!revealed.has(current)){
+                            const committedOk=await revealCurrent(true);
+                            if(!committedOk)return;
+                        }else{
+                            await persistSession();
+                        }
+                        // Keep the loader visible until the returned score has
+                        // been painted before replacing the question content.
+                        await waitForScorePaint();
                         const {response,payload}=await fetchJsonWithTimeout(questionUrl.replace('__INDEX__',String(index)),{headers:{Accept:'application/json','X-Requested-With':'XMLHttpRequest','Cache-Control':'no-cache'}},12000);
                         if(!response.ok)throw new Error('Question request failed');
                         container.innerHTML=payload.html;current=index;
