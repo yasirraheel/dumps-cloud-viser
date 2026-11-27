@@ -133,9 +133,11 @@
                 @php
                     $optionTitle = preg_replace('/^\s*[A-Z](?:[\.\)\:\-])\s*/i', '', (string) $option->title);
                     $displayOptionTitle = $optionTitle;
-                    $isCliOption = preg_match('/^\s*(?:[\w.-]+(?:\([^)]*\))?[>#]|enable\b|line\s+(?:con(?:sole)?|vty)\b|interface\b|router\b|ip\s+(?:access-list|route|address|default-gateway)\b|switchport\b|crypto\b|hostname\b|username\b|service\b|no\s+\S)/i', $optionTitle);
+                    $isCliOption = preg_match('/^\s*(?:[\w.-]+(?:\([^)]*\))?[>#]|enable\b|line\s+(?:con(?:sole)?|vty)\b|interface\b|router\b|ip\s+(?:access-list|route|address|default-gateway)\b|switchport\b|crypto\b|hostname\b|username\b|service\b|no\s+\S)/i', $optionTitle)
+                        || preg_match('/\bgateway of last resort\b|\b[A-Z](?:\s+(?:E[12]|IA|EX))?\*?\s+\d{1,3}(?:\.\d{1,3}){3}\/\d+\b/i', $optionTitle);
                     if ($isCliOption) {
-                        $displayOptionTitle = preg_replace('/\s+(?=[\w.-]+(?:\([^)]*\))?[>#])/', "\n", trim($displayOptionTitle));
+                        $displayOptionTitle = preg_replace('/\s+(?=(?:gateway of last resort\b|[A-Z](?:\s+(?:E[12]|IA|EX))?\*?\s+\d{1,3}(?:\.\d{1,3}){3}\/\d+\b))/i', "\n", trim($displayOptionTitle));
+                        $displayOptionTitle = preg_replace('/\s+(?=[\w.-]+(?:\([^)]*\))?[>#])/', "\n", $displayOptionTitle);
                         $displayOptionTitle = preg_replace('/\s+(?=(?:line\s+(?:con(?:sole)?|vty)\b|interface\s+\S+|router\s+\S+))/', "\n", $displayOptionTitle);
                         $displayOptionTitle = preg_replace('/\s+(?=(?:password\s+\S+|login\b|transport\s+input\b|exec-timeout\b|access-class\b|logging\s+synchronous\b|authorization\b|privilege\s+level\b))/i', "\n  ", $displayOptionTitle);
                     }

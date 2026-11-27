@@ -66,13 +66,22 @@
                                 @foreach ($question->options as $option)
                                     @php
                                         $optionTitle = preg_replace('/^\s*[A-Z](?:[\.\)\:\-])\s*/i', '', (string) $option->title);
+                                        $displayOptionTitle = $optionTitle;
+                                        $isCliOption = preg_match('/^\s*(?:[\w.-]+(?:\([^)]*\))?[>#]|enable\b|line\s+(?:con(?:sole)?|vty)\b|interface\b|router\b|ip\s+(?:access-list|route|address|default-gateway)\b|switchport\b|crypto\b|hostname\b|username\b|service\b|no\s+\S)/i', $optionTitle)
+                                            || preg_match('/\bgateway of last resort\b|\b[A-Z](?:\s+(?:E[12]|IA|EX))?\*?\s+\d{1,3}(?:\.\d{1,3}){3}\/\d+\b/i', $optionTitle);
+                                        if ($isCliOption) {
+                                            $displayOptionTitle = preg_replace('/\s+(?=(?:gateway of last resort\b|[A-Z](?:\s+(?:E[12]|IA|EX))?\*?\s+\d{1,3}(?:\.\d{1,3}){3}\/\d+\b))/i', "\n", trim($displayOptionTitle));
+                                            $displayOptionTitle = preg_replace('/\s+(?=[\w.-]+(?:\([^)]*\))?[>#])/', "\n", $displayOptionTitle);
+                                            $displayOptionTitle = preg_replace('/\s+(?=(?:line\s+(?:con(?:sole)?|vty)\b|interface\s+\S+|router\s+\S+))/', "\n", $displayOptionTitle);
+                                            $displayOptionTitle = preg_replace('/\s+(?=(?:password\s+\S+|login\b|transport\s+input\b|exec-timeout\b|access-class\b|logging\s+synchronous\b|authorization\b|privilege\s+level\b))/i', "\n  ", $displayOptionTitle);
+                                        }
                                         $isSelected = in_array((int) $option->id, $selectedOptionIds, true);
                                         $isCorrectOption = in_array((int) $option->id, $correctOptionIds, true);
                                         $optionState = $isCorrectOption ? 'correct' : ($isSelected ? 'wrong' : 'neutral');
                                     @endphp
                                     <div class="review-option review-option--{{ $optionState }}">
                                         <span class="review-option-letter">{{ $optionLetters[$loop->index] ?? $loop->iteration }}</span>
-                                        <span class="review-option-text">{{ __($optionTitle) }}</span>
+                                        <span class="review-option-text">{{ __($displayOptionTitle) }}</span>
                                         <span class="review-option-note">
                                             @if ($isCorrectOption) @lang('Correct answer')
                                             @elseif ($isSelected) @lang('Your answer') @endif
