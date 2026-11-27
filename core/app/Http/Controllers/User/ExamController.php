@@ -100,6 +100,13 @@ class ExamController extends Controller {
         $sessionAnswers    = $attendExam->session_answers ?? [];
         $sessionAnswerData = $attendExam->session_answer_data ?? [];
         $sessionIndex      = max(0, min($questionCount - 1, (int) ($attendExam->current_question ?? 0)));
+        $sessionAttempted = array_values(array_unique(array_filter(
+            array_map('intval', (array) (($attendExam->exam_settings ?? [])['attempted_questions'] ?? [])),
+            fn ($index) => $index >= 0 && $index < $questionCount
+        )));
+        if (!$sessionAttempted && $sessionIndex > 0) {
+            $sessionAttempted = range(0, $sessionIndex - 1);
+        }
         $sessionRemaining  = $attendExam->remaining_seconds;
         $sessionPaused = (bool) ($attendExam->is_paused ?? false);
         $sessionFlagged    = $this->globalIndicesToFlowIndices((array) ($attendExam->flagged_questions ?? []), $flowQuestionIds, $allQuestionIds);
@@ -125,7 +132,7 @@ class ExamController extends Controller {
 
         return view('Template::user.exams.start', compact(
             'pageTitle', 'exam', 'attendExam', 'question', 'questionCount', 'savedAnswer', 'savedDragData',
-            'sessionIndex', 'sessionRemaining', 'sessionPaused', 'sessionFlagged', 'sessionRevealed', 'answeredIndexes',
+            'sessionIndex', 'sessionRemaining', 'sessionPaused', 'sessionFlagged', 'sessionRevealed', 'sessionAttempted', 'answeredIndexes',
             'sessionCommitted', 'sessionIncorrect', 'settings', 'showAnswers', 'showLiveScore', 'timerLabel', 'liveScore', 'dragFeedback'
         ));
     }
@@ -458,6 +465,18 @@ class ExamController extends Controller {
         }
         $attendExam->session_answers    = $cleanAnswers;
         $attendExam->session_answer_data= $cleanAnswerData;
+        $attemptedQuestions = $request->input('attempted_questions');
+        $examSettings = (array) ($attendExam->exam_settings ?? []);
+        if (is_array($attemptedQuestions)) {
+            $examSettings['attempted_questions'] = array_values(array_unique(array_filter(
+                array_map('intval', $attemptedQuestions),
+                fn ($index) => $index >= 0 && $index < count($questionIds)
+            )));
+        } elseif (!array_key_exists('attempted_questions', $examSettings)) {
+            $currentIndex = (int) $attendExam->current_question;
+            $examSettings['attempted_questions'] = $currentIndex > 0 ? range(0, $currentIndex - 1) : [];
+        }
+        $attendExam->exam_settings = $examSettings;
         $attendExam->flagged_questions = $this->mergeFlowIndices(
             (array) ($attendExam->flagged_questions ?? []),
             (array) $request->input('flagged_questions', []),
@@ -1024,14 +1043,22 @@ class ExamController extends Controller {
             }
         }
         $totalQuestions = (int) $score['total_questions'];
+        $attemptedQuestions = array_values(array_unique(array_filter(
+            array_map('intval', (array) (($attempt->exam_settings ?? [])['attempted_questions'] ?? [])),
+            fn ($index) => $index >= 0 && $index < count($flowQuestionIds)
+        )));
+        if (!$attemptedQuestions && $currentIndex > 0) {
+            $attemptedQuestions = range(0, $currentIndex - 1);
+        }
         $progressPercentage = $totalQuestions > 0
-            ? round(($answeredCount / $totalQuestions) * 100, 2)
+            ? round((count($attemptedQuestions) / $totalQuestions) * 100, 2)
             : 0.0;
         $liveScore = [
             'correct' => $score['correct'],
             'total_questions' => $score['total_questions'],
             'percentage' => $score['percentage'],
             'answered' => $answeredCount,
+            'attempted' => count($attemptedQuestions),
             'progress_percentage' => $progressPercentage,
             'evaluated' => count($committedIds),
         ];

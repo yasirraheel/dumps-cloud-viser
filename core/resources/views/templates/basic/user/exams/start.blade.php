@@ -14,7 +14,7 @@
                     <div class="exam-flow-tools">
                         <div class="exam-clock {{ $sessionRemaining === null ? 'd-none' : '' }}"><i class="las la-stopwatch"></i> <span class="exam-countdown-time__hrs">00</span>:<span class="exam-countdown-time__min">00</span>:<span class="exam-countdown-time__sec">00</span></div>
                         @if ($showLiveScore)
-                            <span class="exam-live-score" id="liveScore"><strong>Score: {{ $liveScore['correct'] }}/{{ $liveScore['total_questions'] }}</strong><b>{{ number_format($liveScore['percentage'], 2) }}%</b><small data-live-progress>Answered: {{ $liveScore['answered'] }}/{{ $liveScore['total_questions'] }}</small></span>
+                            <span class="exam-live-score" id="liveScore"><strong>Score: {{ $liveScore['correct'] }}/{{ $liveScore['total_questions'] }}</strong><b>{{ number_format($liveScore['percentage'], 2) }}%</b><small data-live-progress>Attempted: {{ $liveScore['attempted'] }}/{{ $liveScore['total_questions'] }}</small></span>
                         @endif
                         <button type="button" class="btn btn--dark btn--sm exam-pause-toggle" id="examPauseToggle" aria-label="@lang('Pause exam')" title="@lang('Pause exam')" aria-pressed="false"><i class="las la-pause" aria-hidden="true"></i><span class="exam-pause-label">@lang('Pause exam')</span></button><button type="button" class="btn btn--dark btn--sm exam-fullscreen-toggle" id="examFullscreenToggle" data-enter-label="@lang('Full screen')" data-exit-label="@lang('Exit full screen')" aria-label="@lang('Enter full screen')" title="@lang('Full screen')" aria-pressed="false">
                             <i class="las la-expand" data-fullscreen-icon aria-hidden="true"></i>
@@ -162,6 +162,7 @@
                 let current=Number(@json($sessionIndex))||0;
                 let reviewed=new Set((@json($sessionFlagged)||[]).map(Number));
                 let revealed=new Set((@json($sessionRevealed)||[]).map(Number));
+                let attemptedIndexes=new Set((@json($sessionAttempted)||[]).map(Number));
                 let committed=new Set((@json($sessionCommitted)||[]).map(Number));
                 let incorrectIndexes=new Set((@json($sessionIncorrect)||[]).map(Number));
                 let answeredIndexes=new Set((@json($answeredIndexes)||[]).map(Number));
@@ -204,13 +205,14 @@
                 }
                 function sessionPayload(){
                     const payload=currentPayload();
-                    return {question_id:payload.questionId,current_question:current,remaining_seconds:secondsRemaining,is_paused:timerPaused,answer:payload.answer,answer_data:payload.answerData,flagged_questions:[...reviewed],revealed_questions:[...revealed],committed_questions:[...committed]};
+                    return {question_id:payload.questionId,current_question:current,remaining_seconds:secondsRemaining,is_paused:timerPaused,answer:payload.answer,answer_data:payload.answerData,attempted_questions:[...attemptedIndexes],flagged_questions:[...reviewed],revealed_questions:[...revealed],committed_questions:[...committed]};
                 }
                 function updateScore(score){
                     if(!scoreBox||!score)return;
                     const total=Number(score.total_questions||0),correct=Math.min(total,Number(score.correct||0)),answered=Math.min(total,Number(score.answered||0));
                     const scorePercentage=Number.isFinite(Number(score.percentage))?Number(score.percentage):(total?correct*100/total:0);
-                    scoreBox.innerHTML='<strong>Score: '+correct+'/'+total+'</strong><b>'+scorePercentage.toFixed(2)+'%</b><small data-live-progress>Answered: '+answered+'/'+total+'</small>';
+                    const attempted=Math.min(total,Number(score.attempted??answered));
+                    scoreBox.innerHTML='<strong>Score: '+correct+'/'+total+'</strong><b>'+scorePercentage.toFixed(2)+'%</b><small data-live-progress>Attempted: '+attempted+'/'+total+'</small>';
                 }
                 function updateDragScore(isCorrect){
                     if(!scoreBox)return;
@@ -219,10 +221,11 @@
                     const currentCorrect=Number(parts[1])||0;
                     const total=Number(parts[2])||0;
                     const progressParts=scoreBox.querySelector('[data-live-progress]')?.textContent.match(/(\d+)\s*\/\s*(\d+)/i);
-                    const currentAnswered=Number(progressParts?.[1]||0);
-                    const answered=Math.min(total, currentAnswered+1);
+                    const currentAttempted=Number(progressParts?.[1]||0);
+                    const attempted=Math.min(total, currentAttempted+1);
                     const correct=Math.min(total, currentCorrect+(isCorrect?1:0));
-                    updateScore({correct,total_questions:total,answered,percentage:total?correct*100/total:0});
+                    attemptedIndexes.add(current);
+                    updateScore({correct,total_questions:total,answered:attempted,attempted,percentage:total?correct*100/total:0});
                 }
                 function updatePauseDialog(){
                     if(!pauseDialog)return;
@@ -346,7 +349,7 @@
                     try{
                         const {response,payload:result}=await fetchJsonWithTimeout(answerUrl.replace('__INDEX__',String(current)),{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':csrfToken,'X-Requested-With':'XMLHttpRequest'},body:JSON.stringify({answer:payload.answer,answer_data:payload.answerData})},8000);
                         if(!response.ok)throw new Error('Unable to check this answer');
-                        const wasAnswered=hasAnswer();revealed.add(current);committed.add(current);if(wasAnswered)answeredIndexes.add(current);
+                        const wasAnswered=hasAnswer();revealed.add(current);committed.add(current);attemptedIndexes.add(current);if(wasAnswered)answeredIndexes.add(current);
                         if(result.is_correct)incorrectIndexes.delete(current);else if(wasAnswered)incorrectIndexes.add(current);else incorrectIndexes.delete(current);
                         renderFeedback(result,payload);updateScore(result.live_score);refresh();await persistSession();return true;
                     }catch(error){notify('error','@lang('Unable to check this answer. Please try again.')');return false}
@@ -492,6 +495,7 @@
                             hideActionLoader();
                             feedback=result;
                             committed.add(confirmedIndex);
+                            attemptedIndexes.add(confirmedIndex);
                             answeredIndexes.add(confirmedIndex);
                             if(result.is_correct)incorrectIndexes.delete(confirmedIndex);else incorrectIndexes.add(confirmedIndex);
                             question.classList.add('is-confirmed');
@@ -664,6 +668,7 @@
                 }
                 async function loadQuestion(index,commitBeforeMove=false,actionTitle='@lang('Loading question')'){
                     if(loading||index<0||index>=totalQuestions)return;
+                    if(index!==current)attemptedIndexes.add(current);
                     loading=true;container.classList.add('is-loading');refresh();showActionLoader(actionTitle,'@lang('Your exam is being saved and the question is loading.')');
                     try{
                         if(commitBeforeMove&&inlineFeedback&&hasAnswer()&&!revealed.has(current)){const committedOk=await revealCurrent(true);if(!committedOk)return}
@@ -704,7 +709,7 @@
                 });
                 window.addEventListener('blur',()=>setPaused(true));
                 window.addEventListener('pagehide',()=>setPaused(true));
-                form?.addEventListener('submit',async event=>{if(submittedByTimer){showActionLoader('@lang('Submitting exam')','@lang('Your answers are being submitted.')');return}event.preventDefault();if(submitting)return;submitting=true;showActionLoader('@lang('Submitting exam')','@lang('Your answers are being submitted.')');form.querySelectorAll('button[type="submit"]').forEach(button=>{button.disabled=true;button.innerHTML='<i class="las la-spinner la-spin"></i> @lang('Submitting...')'});await persistSession();HTMLFormElement.prototype.submit.call(form)});
+                form?.addEventListener('submit',async event=>{if(submittedByTimer){attemptedIndexes.add(current);showActionLoader('@lang('Submitting exam')','@lang('Your answers are being submitted.')');return}event.preventDefault();if(submitting)return;submitting=true;attemptedIndexes.add(current);showActionLoader('@lang('Submitting exam')','@lang('Your answers are being submitted.')');form.querySelectorAll('button[type="submit"]').forEach(button=>{button.disabled=true;button.innerHTML='<i class="las la-spinner la-spin"></i> @lang('Submitting...')'});await persistSession();HTMLFormElement.prototype.submit.call(form)});
                 function tick(){if(secondsRemaining===null||secondsRemaining===undefined||timerPaused||dragConfirmationPending)return;if(Number(secondsRemaining)<=0){if(!submittedByTimer){submittedByTimer=true;showActionLoader('@lang('Time is up')','@lang('Your exam is being submitted.')');persistSession().finally(()=>HTMLFormElement.prototype.submit.call(form))}return}secondsRemaining=Number(secondsRemaining)-1;renderClock();if(secondsRemaining%5===0&&!step()?.querySelector('.drag-question'))persistSession()}
                 bindCurrent();renderClock();updatePauseDialog();if(timerPaused)persistSession();if(secondsRemaining!==null&&secondsRemaining!==undefined){tick();setInterval(tick,1000)}
                 if(revealed.has(current))revealCurrent();
