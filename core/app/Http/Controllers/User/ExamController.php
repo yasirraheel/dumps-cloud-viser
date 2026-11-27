@@ -838,7 +838,84 @@ class ExamController extends Controller {
             ]);
         }
 
-        return view('Template::user.exams.history', compact('pageTitle', 'examLogs'));
+        $historyStats = $this->historyStats(auth()->id());
+
+        return view('Template::user.exams.history', compact('pageTitle', 'examLogs', 'historyStats'));
+    }
+
+    private function historyStats(int $userId): array
+    {
+        $completedAttempts = AttendExam::where('user_id', $userId)
+            ->where('status', Status::EXAM_COMPLETED)
+            ->with('exam')
+            ->latest()
+            ->get();
+
+        if ($completedAttempts->isEmpty()) {
+            return [
+                'total_attempts' => 0,
+                'passed_attempts' => 0,
+                'average_score' => 0,
+                'overall_progress' => 0,
+            ];
+        }
+
+        $questionsByExam = collect();
+        foreach ($completedAttempts->pluck('exam')->filter()->unique('id') as $exam) {
+            $questionsByExam->put(
+                $exam->id,
+                $this->questionQuery($exam)
+                    ->active()
+                    ->select(['id', 'exam_id', 'question_type', 'answer_data', 'result_option_id', 'sort_order'])
+                    ->with('options', function ($query) {
+                        $query->active()->select(['id', 'question_id']);
+                    })
+                    ->orderBy('sort_order')
+                    ->orderBy('id')
+                    ->get()
+                    ->values()
+            );
+        }
+
+        $answersByAttempt = ExamAnswer::whereIn('exam_attend_id', $completedAttempts->pluck('id'))
+            ->get()
+            ->groupBy('exam_attend_id');
+
+        $results = $completedAttempts->map(function ($attempt) use ($questionsByExam, $answersByAttempt) {
+            $questions = $questionsByExam->get($attempt->exam_id, collect())->values();
+            $answers = $answersByAttempt->get($attempt->id, collect());
+
+            if ($questions->isEmpty()) {
+                $percentage = (float) ($attempt->pass_percentage ?? 0);
+                $passed = $percentage >= (float) ($attempt->exam?->pass_percentage ?? 0);
+            } else {
+                $scoreData = $this->scoreStoredAttempt(
+                    $questions,
+                    $answers,
+                    array_map('intval', (array) ($attempt->committed_questions ?? [])),
+                    (float) ($attempt->exam?->pass_percentage ?? 0)
+                );
+                $percentage = (float) $scoreData['percentage'];
+                $passed = (bool) $scoreData['passed'];
+            }
+
+            return [
+                'percentage' => $percentage,
+                'passed' => $passed,
+            ];
+        });
+
+        $totalAttempts = $results->count();
+        $passedAttempts = $results->where('passed', true)->count();
+
+        return [
+            'total_attempts' => $totalAttempts,
+            'passed_attempts' => $passedAttempts,
+            'average_score' => round((float) $results->avg('percentage'), 2),
+            'overall_progress' => $totalAttempts > 0
+                ? round(($passedAttempts / $totalAttempts) * 100, 2)
+                : 0,
+        ];
     }
 
     public function deleteAttempt($id) {

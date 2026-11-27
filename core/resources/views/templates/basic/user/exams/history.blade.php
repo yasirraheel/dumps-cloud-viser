@@ -26,6 +26,50 @@
                     </div>
                 </form>
             </div>
+
+            <div class="row gy-4 mb-5">
+                <div class="col-xl-3 col-sm-6">
+                    <div class="statistics-item h-100 text-start">
+                        <div class="d-flex align-items-center justify-content-between gap-3 mb-3">
+                            <p class="statistics-item-title mb-0">@lang('Completed Attempts')</p>
+                            <span class="text--base fs-3"><i class="las la-clipboard-check" aria-hidden="true"></i></span>
+                        </div>
+                        <h3 class="statistics-item-count mb-2">{{ $historyStats['total_attempts'] }}</h3>
+                        <p class="mb-0 text-white-50">@lang('Finished exam sessions')</p>
+                    </div>
+                </div>
+                <div class="col-xl-3 col-sm-6">
+                    <div class="statistics-item h-100 text-start">
+                        <div class="d-flex align-items-center justify-content-between gap-3 mb-3">
+                            <p class="statistics-item-title mb-0">@lang('Passed Attempts')</p>
+                            <span class="text--base fs-3"><i class="las la-award" aria-hidden="true"></i></span>
+                        </div>
+                        <h3 class="statistics-item-count mb-2">{{ $historyStats['passed_attempts'] }}</h3>
+                        <p class="mb-0 text-white-50">@lang('Successful exam results')</p>
+                    </div>
+                </div>
+                <div class="col-xl-3 col-sm-6">
+                    <div class="statistics-item h-100 text-start">
+                        <div class="d-flex align-items-center justify-content-between gap-3 mb-3">
+                            <p class="statistics-item-title mb-0">@lang('Average Score')</p>
+                            <span class="text--base fs-3"><i class="las la-chart-line" aria-hidden="true"></i></span>
+                        </div>
+                        <h3 class="statistics-item-count mb-2">{{ getAmount($historyStats['average_score']) }}%</h3>
+                        <p class="mb-0 text-white-50">@lang('Across completed exams')</p>
+                    </div>
+                </div>
+                <div class="col-xl-3 col-sm-6">
+                    <div class="statistics-item h-100 text-start">
+                        <div class="d-flex align-items-center justify-content-between gap-3 mb-3">
+                            <p class="statistics-item-title mb-0">@lang('Overall Progress')</p>
+                            <span class="text--base fs-3"><i class="las la-trophy" aria-hidden="true"></i></span>
+                        </div>
+                        <h3 class="statistics-item-count mb-2">{{ getAmount($historyStats['overall_progress']) }}%</h3>
+                        <p class="mb-0 text-white-50">@lang('Pass rate so far')</p>
+                    </div>
+                </div>
+            </div>
+
             <div class="table--responsive">
                 <table class="table table-responsive--lg exam-history-table">
                     <thead>
