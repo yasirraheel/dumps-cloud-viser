@@ -993,10 +993,24 @@ class ExamController extends Controller {
             $globalCommitted,
             (float) $exam->pass_percentage
         );
+        $sessionAnswers = (array) ($attempt->session_answers ?? []);
+        $sessionAnswerData = (array) ($attempt->session_answer_data ?? []);
+        $answeredCount = 0;
+        foreach ($flowQuestionIds as $questionId) {
+            $hasChoice = array_key_exists($questionId, $sessionAnswers)
+                && (is_array($sessionAnswers[$questionId])
+                    ? count($sessionAnswers[$questionId]) > 0
+                    : $sessionAnswers[$questionId] !== null && $sessionAnswers[$questionId] !== '');
+            $hasDragAnswer = !empty($sessionAnswerData[$questionId] ?? []);
+            if ($hasChoice || $hasDragAnswer) {
+                $answeredCount++;
+            }
+        }
         $liveScore = [
             'correct' => $score['correct'],
             'total_questions' => $score['total_questions'],
             'percentage' => $score['percentage'],
+            'answered' => $answeredCount,
             'evaluated' => count($committedIds),
         ];
         if ($includeQuestionResults) {

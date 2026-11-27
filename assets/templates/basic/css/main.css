@@ -8642,6 +8642,12 @@ td[colspan="100%"]::before {
     color: hsl(var(--info));
 }
 
+.exam-take-page .exam-live-score small {
+    color: hsl(var(--text-color));
+    font-size: .72rem;
+    font-weight: 600;
+}
+
 .exam-question-nav .question-nav-item.is-incorrect {
     background: hsl(var(--danger)/.15);
     border-color: hsl(var(--danger));
