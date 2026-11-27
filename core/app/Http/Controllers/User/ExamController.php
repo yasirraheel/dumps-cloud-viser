@@ -994,6 +994,15 @@ class ExamController extends Controller {
             }
         }
 
+        // Match the original CCNA Dumps behavior: selecting an answer on the
+        // currently open question does not affect the live score until that
+        // question is committed or its answer is revealed.
+        $currentIndex = max(0, (int) ($attempt->current_question ?? 0));
+        $currentQuestionId = $flowQuestionIds[$currentIndex] ?? null;
+        if ($currentQuestionId !== null && !isset($committedIds[$currentQuestionId])) {
+            unset($answers[$currentQuestionId], $answerData[$currentQuestionId]);
+        }
+
         $score = ExamScoreCalculator::evaluate(
             $questions->values(),
             $answers,
@@ -1015,38 +1024,14 @@ class ExamController extends Controller {
             }
         }
         $totalQuestions = (int) $score['total_questions'];
-        $currentIndex = max(0, (int) ($attempt->current_question ?? 0));
-        $currentQuestionId = $flowQuestionIds[$currentIndex] ?? null;
-        $currentHasAnswer = $currentQuestionId !== null && (
-            (array_key_exists($currentQuestionId, $sessionAnswers)
-                && (is_array($sessionAnswers[$currentQuestionId])
-                    ? count($sessionAnswers[$currentQuestionId]) > 0
-                    : $sessionAnswers[$currentQuestionId] !== null && $sessionAnswers[$currentQuestionId] !== ''))
-            || !empty($sessionAnswerData[$currentQuestionId] ?? [])
-        );
-        // The attempted denominator includes questions already passed, including
-        // skipped ones, but does not count the currently open question until it
-        // has an answer saved.
-        $attemptedCount = min(
-            $totalQuestions,
-            max($answeredCount, $currentIndex + ($currentHasAnswer ? 1 : 0))
-        );
-        $attemptedPercentage = $attemptedCount > 0
-            ? round(((int) $score['correct'] / $attemptedCount) * 100, 2)
-            : 0.0;
         $progressPercentage = $totalQuestions > 0
-            ? round(($attemptedCount / $totalQuestions) * 100, 2)
+            ? round(($answeredCount / $totalQuestions) * 100, 2)
             : 0.0;
         $liveScore = [
             'correct' => $score['correct'],
             'total_questions' => $score['total_questions'],
             'percentage' => $score['percentage'],
             'answered' => $answeredCount,
-            'answered_percentage' => $answeredCount > 0
-                ? round(((int) $score['correct'] / $answeredCount) * 100, 2)
-                : 0.0,
-            'attempted' => $attemptedCount,
-            'attempted_percentage' => $attemptedPercentage,
             'progress_percentage' => $progressPercentage,
             'evaluated' => count($committedIds),
         ];
