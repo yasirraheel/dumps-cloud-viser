@@ -653,7 +653,7 @@ class ExamController extends Controller {
             }
         }
 
-        DB::transaction(function () use ($submitExam, $replacementQuestionIds, $data, $exam, $allQuestionIds, $globalCommitted) {
+        DB::transaction(function () use ($submitExam, $replacementQuestionIds, $data, $exam, $allQuestionIds, $globalCommitted, $questionsById) {
             if ($replacementQuestionIds) {
                 $submitExam->examAnswer()->whereIn('question_id', $replacementQuestionIds)->delete();
             }
