@@ -59,7 +59,11 @@
                     <button type="button" class="btn btn--dark btn--sm" data-zoom-action="reset">@lang('Reset')</button>
                 </div>
             </div>
-            <div class="exam-exhibit exam-image-frame">
+            <div class="exam-exhibit exam-image-frame" data-image-state="loading" aria-busy="true">
+                <div class="exam-image-loader" data-image-loader role="status" aria-live="polite">
+                    <span class="exam-image-loader__spinner" aria-hidden="true"></span>
+                    <span data-image-loader-label>@lang('Loading exhibit')</span>
+                </div>
                 <img src="{{ asset($question->exhibit_image) }}" alt="@lang('Question exhibit')" data-zoom-image>
             </div>
         </section>
@@ -81,7 +85,11 @@
                     <button type="button" class="btn btn--dark btn--sm" data-zoom-action="reset">@lang('Reset')</button>
                 </div>
             </div>
-            <div class="exam-exhibit exam-image-frame">
+            <div class="exam-exhibit exam-image-frame" data-image-state="loading" aria-busy="true">
+                <div class="exam-image-loader" data-image-loader role="status" aria-live="polite">
+                    <span class="exam-image-loader__spinner" aria-hidden="true"></span>
+                    <span data-image-loader-label>@lang('Loading original source')</span>
+                </div>
                 <img src="{{ $originalSourceUrl }}" alt="@lang('Original source for question :number', ['number' => $questionIndex + 1])" data-zoom-image>
             </div>
         </section>

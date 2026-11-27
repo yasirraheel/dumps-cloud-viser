@@ -559,6 +559,30 @@
                         const zoomIn=viewer.querySelector('[data-zoom-action="in"]');
                         const zoomOut=viewer.querySelector('[data-zoom-action="out"]');
                         const frame=viewer.querySelector('.exam-image-frame');
+                        const image=viewer.querySelector('[data-zoom-image]');
+                        const loader=frame?.querySelector('[data-image-loader]');
+                        const setImageState=(state,label)=>{
+                            if(!frame)return;
+                            frame.dataset.imageState=state;
+                            frame.setAttribute('aria-busy',state==='loading'?'true':'false');
+                            if(loader){
+                                loader.classList.toggle('is-error',state==='error');
+                                loader.hidden=state==='ready';
+                                const labelNode=loader.querySelector('[data-image-loader-label]');
+                                if(labelNode&&label)labelNode.textContent=label;
+                            }
+                        };
+                        if(image){
+                            const markReady=()=>setImageState('ready');
+                            const markError=()=>setImageState('error','@lang('Exhibit could not be loaded')');
+                            if(image.complete){
+                                image.naturalWidth>0?markReady():markError();
+                            }else{
+                                setImageState('loading');
+                                image.addEventListener('load',markReady,{once:true});
+                                image.addEventListener('error',markError,{once:true});
+                            }
+                        }
                         let panPointer=null;
                         let panStart=null;
                         const stopPanning=event=>{

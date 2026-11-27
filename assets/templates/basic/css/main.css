@@ -3785,8 +3785,59 @@ input[type=number] {
 .exam-image-frame {
     max-height: 520px;
     overflow: auto;
+    position: relative;
     scrollbar-width: none;
     -ms-overflow-style: none;
+}
+
+.exam-image-frame[data-image-state="loading"],
+.exam-image-frame[data-image-state="error"] {
+    min-height: 150px;
+}
+
+.exam-image-loader {
+    align-items: center;
+    background: hsl(var(--body-bg)/.45);
+    color: hsl(var(--text-color));
+    display: flex;
+    flex-direction: column;
+    font-size: .9rem;
+    font-weight: 600;
+    gap: 10px;
+    inset: 0;
+    justify-content: center;
+    min-height: 150px;
+    padding: 24px;
+    position: absolute;
+    text-align: center;
+    z-index: 2;
+}
+
+.exam-image-frame[data-image-state="ready"] .exam-image-loader {
+    display: none;
+}
+
+.exam-image-loader__spinner {
+    animation: exam-image-loader-spin .8s linear infinite;
+    border: 3px solid hsl(var(--base)/.2);
+    border-radius: 50%;
+    border-top-color: hsl(var(--base));
+    height: 34px;
+    width: 34px;
+}
+
+.exam-image-loader.is-error {
+    color: hsl(var(--danger));
+}
+
+.exam-image-loader.is-error .exam-image-loader__spinner {
+    animation: none;
+    border-color: hsl(var(--danger)/.55);
+    border-top-color: hsl(var(--danger));
+}
+
+@keyframes exam-image-loader-spin {
+    to { transform: rotate(360deg); }
 }
 
 .exam-image-frame::-webkit-scrollbar {
