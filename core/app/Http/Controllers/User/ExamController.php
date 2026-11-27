@@ -1006,11 +1006,20 @@ class ExamController extends Controller {
                 $answeredCount++;
             }
         }
+        $totalQuestions = (int) $score['total_questions'];
+        $answeredPercentage = $answeredCount > 0
+            ? round(((int) $score['correct'] / $answeredCount) * 100, 2)
+            : 0.0;
+        $progressPercentage = $totalQuestions > 0
+            ? round(($answeredCount / $totalQuestions) * 100, 2)
+            : 0.0;
         $liveScore = [
             'correct' => $score['correct'],
             'total_questions' => $score['total_questions'],
             'percentage' => $score['percentage'],
             'answered' => $answeredCount,
+            'answered_percentage' => $answeredPercentage,
+            'progress_percentage' => $progressPercentage,
             'evaluated' => count($committedIds),
         ];
         if ($includeQuestionResults) {

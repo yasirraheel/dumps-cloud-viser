@@ -14,7 +14,7 @@
                     <div class="exam-flow-tools">
                         <div class="exam-clock {{ $sessionRemaining === null ? 'd-none' : '' }}"><i class="las la-stopwatch"></i> <span class="exam-countdown-time__hrs">00</span>:<span class="exam-countdown-time__min">00</span>:<span class="exam-countdown-time__sec">00</span></div>
                         @if ($showLiveScore)
-                            <span class="exam-live-score" id="liveScore"><strong>Score: {{ $liveScore['correct'] }}/{{ $liveScore['total_questions'] }}</strong><b>{{ number_format($liveScore['percentage'], 2) }}%</b><small data-live-answered>Answered: {{ $liveScore['answered'] }}/{{ $liveScore['total_questions'] }}</small></span>
+                            <span class="exam-live-score" id="liveScore"><strong>Score: {{ $liveScore['correct'] }}/{{ $liveScore['answered'] }}</strong><b>{{ number_format($liveScore['answered_percentage'], 2) }}%</b><small data-live-progress>Progress: {{ $liveScore['answered'] }}/{{ $liveScore['total_questions'] }}</small></span>
                         @endif
                         <button type="button" class="btn btn--dark btn--sm exam-pause-toggle" id="examPauseToggle" aria-label="@lang('Pause exam')" title="@lang('Pause exam')" aria-pressed="false"><i class="las la-pause" aria-hidden="true"></i><span class="exam-pause-label">@lang('Pause exam')</span></button><button type="button" class="btn btn--dark btn--sm exam-fullscreen-toggle" id="examFullscreenToggle" data-enter-label="@lang('Full screen')" data-exit-label="@lang('Exit full screen')" aria-label="@lang('Enter full screen')" title="@lang('Full screen')" aria-pressed="false">
                             <i class="las la-expand" data-fullscreen-icon aria-hidden="true"></i>
@@ -209,17 +209,20 @@
                 function updateScore(score){
                     if(!scoreBox||!score)return;
                     const total=Number(score.total_questions||0),correct=Math.min(total,Number(score.correct||0)),answered=Math.min(total,Number(score.answered||0));
-                    scoreBox.innerHTML='<strong>Score: '+correct+'/'+total+'</strong><b>'+Number(score.percentage||0).toFixed(2)+'%</b><small data-live-answered>Answered: '+answered+'/'+total+'</small>';
+                    const scorePercentage=Number.isFinite(Number(score.answered_percentage))?Number(score.answered_percentage):(answered?correct*100/answered:0);
+                    scoreBox.innerHTML='<strong>Score: '+correct+'/'+answered+'</strong><b>'+scorePercentage.toFixed(2)+'%</b><small data-live-progress>Progress: '+answered+'/'+total+'</small>';
                 }
                 function updateDragScore(isCorrect){
                     if(!scoreBox)return;
                     const parts=scoreBox.querySelector('strong')?.textContent.match(/(\d+)\s*\/\s*(\d+)/);
                     if(!parts)return;
-                    const total=Number(parts[2])||0;
-                    const correct=Math.min(total,Number(parts[1])+(isCorrect?1:0));
-                    const answeredParts=scoreBox.querySelector('[data-live-answered]')?.textContent.match(/(\d+)\s*\/\s*(\d+)/i);
-                    const answered=Math.min(total,Number(answeredParts?.[1]||0)+1);
-                    updateScore({correct,total_questions:total,answered,percentage:total?correct*100/total:0});
+                    const currentCorrect=Number(parts[1])||0;
+                    const currentAnswered=Number(parts[2])||0;
+                    const progressParts=scoreBox.querySelector('[data-live-progress]')?.textContent.match(/(\d+)\s*\/\s*(\d+)/i);
+                    const total=Number(progressParts?.[2]||currentAnswered)||0;
+                    const answered=Math.min(total, currentAnswered+1);
+                    const correct=Math.min(answered, currentCorrect+(isCorrect?1:0));
+                    updateScore({correct,total_questions:total,answered,answered_percentage:answered?correct*100/answered:0});
                 }
                 function updatePauseDialog(){
                     if(!pauseDialog)return;
