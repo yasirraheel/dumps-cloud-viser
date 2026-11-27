@@ -977,12 +977,20 @@ class ExamController extends Controller {
         }
         $sessionAnswers = (array) ($attempt->session_answers ?? []);
         $sessionData = (array) ($attempt->session_answer_data ?? []);
-        foreach (array_keys($committedIds) as $questionId) {
-            if (array_key_exists($questionId, $sessionAnswers)) {
-                $answers[$questionId] = $sessionAnswers[$questionId];
+        // Live scoring must include every answer already saved in the session.
+        // The committed list is only used by the calculator for confirmed drag
+        // and drop matches. Filtering normal answers by it made the live score
+        // ignore answers saved while inline feedback was disabled.
+        foreach ($sessionAnswers as $questionId => $answer) {
+            $questionId = (string) $questionId;
+            if ($questions->has($questionId)) {
+                $answers[$questionId] = $answer;
             }
-            if (array_key_exists($questionId, $sessionData)) {
-                $answerData[$questionId] = $sessionData[$questionId];
+        }
+        foreach ($sessionData as $questionId => $data) {
+            $questionId = (string) $questionId;
+            if ($questions->has($questionId)) {
+                $answerData[$questionId] = $data;
             }
         }
 
