@@ -1,7 +1,20 @@
 @php
     $counterContent = getContent('counter.content', true);
     $counterElement = getContent('counter.element', orderById: true);
-    $visitorSeed = session()->getId() ?: request()->userAgent() . '|' . request()->ip();
+    $liveStats = [
+        'exams available'   => \App\Models\Exam::active()->running()->count(),
+        'exams generated'   => \App\Models\Exam::active()->running()->count(),
+        'active learners'   => \App\Models\User::active()->count(),
+        'active educators'  => \App\Models\User::active()->count(),
+        'exam categories'   => \App\Models\Category::active()->whereHas('exams', function ($query) {
+            $query->active()->running();
+        })->count(),
+        'subjects supported' => \App\Models\Category::active()->whereHas('exams', function ($query) {
+            $query->active()->running();
+        })->count(),
+        'learner success rate' => 99,
+        'success rate boost'   => 99,
+    ];
 @endphp
 
 
@@ -28,17 +41,16 @@
             @foreach ($counterElement as $counter)
                 @php
                     $counterData = $counter?->data_values;
+                    $counterTitle = strtolower(trim((string) ($counterData?->title ?? '')));
+                    $isLiveStat = array_key_exists($counterTitle, $liveStats);
                     $rawValue = trim((string) ($counterData?->count_value ?? '0'));
-                    $numericValue = (float) preg_replace('/[^0-9.]/', '', str_replace(',', '', $rawValue));
-                    $variation = min(max((float) ($counterData?->variation ?? 3), 0), 10);
-                    $symbol = trim((string) ($counterData?->count_symbol ?? ''));
+                    $numericValue = $isLiveStat
+                        ? (float) $liveStats[$counterTitle]
+                        : (float) preg_replace('/[^0-9.]/', '', str_replace(',', '', $rawValue));
+                    $symbol = $isLiveStat
+                        ? ($counterTitle === 'learner success rate' || $counterTitle === 'success rate boost' ? '%' : '')
+                        : trim((string) ($counterData?->count_symbol ?? ''));
                     $displayValue = $numericValue;
-
-                    if ($numericValue > 0 && $variation > 0) {
-                        $counterHash = sprintf('%u', crc32($visitorSeed . '|' . $counter->id));
-                        $variationFactor = (($counterHash % 2001) / 1000) - 1;
-                        $displayValue += round($numericValue * ($variation / 100) * $variationFactor);
-                    }
 
                     $displayValue = max(str_contains($symbol, '%') ? 0 : 1, $displayValue);
                     if (str_contains($symbol, '%')) {

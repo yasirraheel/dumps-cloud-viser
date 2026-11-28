@@ -1,6 +1,10 @@
 @php
     $bannerContent = getContent('banner.content', true);
     $bannerElement = getContent('banner.element', false, 3, true);
+    $activeLearners = \App\Models\User::active()->count();
+    $ratingText = $activeLearners > 0
+        ? __('Trusted by :count learners', ['count' => number_format($activeLearners)])
+        : __($bannerContent?->data_values?->rating_text ?? '');
 @endphp
 <section class="banner-section">
     <div class="container">
@@ -35,9 +39,8 @@
                                         echo showRatings($bannerContent?->data_values?->review_rating ?? 5);
                                     @endphp
                                 </ul>
-                                <span class="count">{{ __($bannerContent?->data_values?->rating_text ?? '') }}</span>
+                                <span class="count">{{ $ratingText }}</span>
                             </div>
-                            <p class="banner-content-rating-text">{{ __($bannerContent?->data_values?->rating_text ?? '') }}</p>
                         </div>
                     </div>
                 </div>
