@@ -38,7 +38,7 @@
                         <div class="exam-qsn">
                             <div class="exam-qsn-header">
                                 <h5 class="exam-qsn-title">
-                                    {{ $key + 1 }}. {{ __($question->title) }}
+                                    {{ $key + 1 }}. {{ $question->title }}
                                 </h5>
                             </div>
                             <div class="exam-qsn-body">
@@ -47,7 +47,7 @@
                                         <li class="exam-qsn-item form--check @if ($attendExam->status == Status::EXAM_COMPLETED) {{ $question->result_option_id == $option->id ? 'correct-answer' : '' }} @endif">
                                             <input type="radio" class="form-check-input" name="answer[{{ $question->id }}]"
                                                    value="{{ $option->id }}" id="qsn-{{ $question->id }}-{{ $option->id }}" @checked(isset($examAnswer[$question->id]) && $examAnswer[$question->id] == $option->id)>
-                                            <label for="qsn-{{ $question->id }}-{{ $option->id }}">{{ __($option->title) }}</label>
+                                            <label for="qsn-{{ $question->id }}-{{ $option->id }}">{{ $option->title }}</label>
                                         </li>
                                     @endforeach
                                 </ul>

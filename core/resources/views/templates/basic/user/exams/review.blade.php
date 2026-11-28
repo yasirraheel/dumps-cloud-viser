@@ -35,7 +35,7 @@
                             <span>@lang('Question') {{ $index + 1 }}</span>
                             <span class="review-type-badge">{{ ucwords(str_replace('_', ' ', $questionType)) }}</span>
                         </div>
-                        <h2 class="review-question-title">{{ __($question->title) }}</h2>
+                        <h2 class="review-question-title">{{ $question->title }}</h2>
 
                         @if ($question->exhibit_image)
                             <div class="exam-exhibit"><img src="{{ asset($question->exhibit_image) }}" alt="@lang('Question exhibit')"></div>
@@ -81,7 +81,7 @@
                                     @endphp
                                     <div class="review-option review-option--{{ $optionState }}">
                                         <span class="review-option-letter">{{ $optionLetters[$loop->index] ?? $loop->iteration }}</span>
-                                        <span class="review-option-text">{{ __($displayOptionTitle) }}</span>
+                                        <span class="review-option-text">{{ $displayOptionTitle }}</span>
                                         <span class="review-option-note">
                                             @if ($isCorrectOption) @lang('Correct answer')
                                             @elseif ($isSelected) @lang('Your answer') @endif

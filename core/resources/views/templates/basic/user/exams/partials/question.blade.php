@@ -8,7 +8,9 @@
     $dragItems = $answerData['items'] ?? [];
     $dragTargets = $answerData['targets'] ?? [];
     $savedOptionIds = is_array($savedAnswer) ? array_map('intval', $savedAnswer) : (($savedAnswer !== null && $savedAnswer !== '') ? [(int) $savedAnswer] : []);
-    $questionTitle = (string) __($question->title);
+    {{-- Exam content must be rendered exactly as stored. The translation helper
+         can replace numeric option text with unrelated language strings. --}}
+    $questionTitle = (string) $question->title;
     $questionTitleLines = preg_split('/\\R/u', trim($questionTitle)) ?: [];
     $nonEmptyQuestionTitleLines = array_values(array_filter(array_map('trim', $questionTitleLines), static fn ($line) => $line !== ''));
     $hasQuestionTitleListBreaks = preg_match('/\\R\\s*\\R/u', $questionTitle) === 1;
@@ -142,7 +144,7 @@
                         $displayOptionTitle = preg_replace('/\s+(?=(?:password\s+\S+|login\b|transport\s+input\b|exec-timeout\b|access-class\b|logging\s+synchronous\b|authorization\b|privilege\s+level\b))/i', "\n  ", $displayOptionTitle);
                     }
                 @endphp
-                <label class="exam-qsn-item {{ $type === 'multiple_selection' ? 'exam-qsn-item--multiple' : '' }}" for="qsn-{{ $question->id }}-{{ $option->id }}">@if ($type === 'multiple_selection')<span class="exam-option-selection-mark" aria-hidden="true"></span>@endif<span class="exam-qsn-item__label">{{ $optionLetters[$loop->index] ?? $loop->iteration }}</span><span class="exam-option-text">{{ __($displayOptionTitle) }}</span><input type="{{ $type === 'multiple_selection' ? 'checkbox' : 'radio' }}" class="d-none answer-input" name="answer[{{ $question->id }}]{{ $type === 'multiple_selection' ? '[]' : '' }}" value="{{ $option->id }}" id="qsn-{{ $question->id }}-{{ $option->id }}" @checked(in_array($option->id, $savedOptionIds))></label>
+                <label class="exam-qsn-item {{ $type === 'multiple_selection' ? 'exam-qsn-item--multiple' : '' }}" for="qsn-{{ $question->id }}-{{ $option->id }}">@if ($type === 'multiple_selection')<span class="exam-option-selection-mark" aria-hidden="true"></span>@endif<span class="exam-qsn-item__label">{{ $optionLetters[$loop->index] ?? $loop->iteration }}</span><span class="exam-option-text">{{ $displayOptionTitle }}</span><input type="{{ $type === 'multiple_selection' ? 'checkbox' : 'radio' }}" class="d-none answer-input" name="answer[{{ $question->id }}]{{ $type === 'multiple_selection' ? '[]' : '' }}" value="{{ $option->id }}" id="qsn-{{ $question->id }}-{{ $option->id }}" @checked(in_array($option->id, $savedOptionIds))></label>
             @endforeach
         </div>
     @endif
