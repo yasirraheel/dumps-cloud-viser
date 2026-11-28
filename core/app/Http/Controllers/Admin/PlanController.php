@@ -43,9 +43,9 @@ class PlanController extends Controller {
         $request->validate([
             'name'              => 'required|string|max:40|unique:plans,name,' . $id,
             'monthly_price'     => 'required|numeric|min:0',
-            'yearly_price'      => 'required|numeric|min:0',
+            'yearly_price'      => 'nullable|numeric|min:0',
             'monthly_exam'      => 'required|integer|min:0',
-            'yearly_exam'       => 'required|integer|min:0',
+            'yearly_exam'       => 'nullable|integer|min:0',
             'short_description' => 'required|string|max:255',
             'allowed_categories' => 'nullable|array',
             'allowed_categories.*' => 'integer|exists:categories,id',
@@ -88,12 +88,14 @@ class PlanController extends Controller {
             'certificate' => $request->boolean('feature_certificate'),
         ];
         $isFree = $request->boolean('is_free');
+        $monthlyPrice = (float) $request->input('monthly_price', 0);
+        $monthlyExamLimit = (int) $request->input('monthly_exam', 0);
 
         $plan->name              = $request->name;
-        $plan->monthly_price     = $isFree ? 0 : $request->monthly_price;
-        $plan->yearly_price      = $isFree ? 0 : $request->yearly_price;
-        $plan->monthly_exam      = $request->monthly_exam;
-        $plan->yearly_exam       = $request->yearly_exam;
+        $plan->monthly_price     = $isFree ? 0 : $monthlyPrice;
+        $plan->yearly_price      = $isFree ? 0 : $this->annualPrice($monthlyPrice);
+        $plan->monthly_exam      = $monthlyExamLimit;
+        $plan->yearly_exam       = $monthlyExamLimit * 12;
         $plan->short_description = $request->short_description;
         $plan->allowed_categories = $allowedCategories;
         $plan->allowed_exams = $allowedExams;
@@ -112,5 +114,11 @@ class PlanController extends Controller {
     }
     public function status($id) {
         return Plan::changeStatus($id);
+    }
+
+    private function annualPrice(float $monthlyPrice): float
+    {
+        $discount = max(0, min(100, (float) config('billing.annual_discount_percent', 20)));
+        return round($monthlyPrice * 12 * (1 - ($discount / 100)), 2);
     }
 }

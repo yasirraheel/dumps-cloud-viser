@@ -9,7 +9,7 @@
         <div class="col-lg-10">
             <div class="card bg-card-style">
                 <div class="card-body">
-                    <form action="{{ route('admin.plan.store', $plan?->id ?? 0) }}" method="POST">
+                    <form action="{{ route('admin.plan.store', $plan?->id ?? 0) }}" method="POST" data-plan-billing-form data-annual-discount="{{ (float) config('billing.annual_discount_percent', 20) }}">
                         @csrf
 
                         <div class="field-wrapper">
@@ -123,7 +123,7 @@
                             </div>
                             <div class="field-wrapper-view">
                                 <div class="input-group">
-                                    <input class="form-control" type="number" step="any" name="monthly_price" value="{{ getAmount($plan?->monthly_price) ?? '' }}" required>
+                                    <input class="form-control" id="monthlyPrice" type="number" step="any" min="0" name="monthly_price" value="{{ getAmount($plan?->monthly_price) ?? '' }}" required>
                                     <span class="input-group-text">{{ gs('cur_text') }}</span>
                                 </div>
                             </div>
@@ -132,11 +132,11 @@
                         <div class="field-wrapper">
                             <div class="field-wrapper-label">
                                 <p class="title">@lang('Yearly Price')</p>
-                                <p class="note">@lang('The subscription cost charged annually (often discounted from monthly pricing).')</p>
+                                <p class="note">@lang('Calculated automatically from the monthly price with an annual discount of') {{ (float) config('billing.annual_discount_percent', 20) }}%.</p>
                             </div>
                             <div class="field-wrapper-view">
                                 <div class="input-group">
-                                    <input class="form-control" type="number" step="any" name="yearly_price" value="{{ getAmount($plan?->yearly_price) ?? '' }}" required>
+                                    <input class="form-control" id="yearlyPrice" type="number" step="any" min="0" name="yearly_price" value="{{ getAmount($plan?->yearly_price) ?? '' }}" readonly required>
                                     <span class="input-group-text">{{ gs('cur_text') }}</span>
                                 </div>
                             </div>
@@ -148,7 +148,7 @@
                                 <p class="note">@lang('The number of monthly exam limit included in the plan for the examination')</p>
                             </div>
                             <div class="field-wrapper-view">
-                                <input class="form-control" type="number" name="monthly_exam" value="{{ $plan?->monthly_exam ?? '' }}" required>
+                                <input class="form-control" id="monthlyExamLimit" type="number" min="0" name="monthly_exam" value="{{ $plan?->monthly_exam ?? '' }}" required>
                             </div>
                         </div>
                         <div class="field-wrapper">
@@ -157,7 +157,7 @@
                                 <p class="note">@lang('The number of yearly exam limit included in the plan for the examination.')</p>
                             </div>
                             <div class="field-wrapper-view">
-                                <input class="form-control" type="number" name="yearly_exam" value="{{ $plan?->yearly_exam ?? '' }}" required>
+                                <input class="form-control" id="yearlyExamLimit" type="number" min="0" name="yearly_exam" value="{{ $plan?->yearly_exam ?? '' }}" readonly required>
                             </div>
                         </div>
 
@@ -299,6 +299,28 @@
 @push('script')
     <script>
         (function() {
+            var billingForm = document.querySelector('[data-plan-billing-form]');
+            var monthlyPrice = document.getElementById('monthlyPrice');
+            var yearlyPrice = document.getElementById('yearlyPrice');
+            var monthlyExamLimit = document.getElementById('monthlyExamLimit');
+            var yearlyExamLimit = document.getElementById('yearlyExamLimit');
+
+            function syncDerivedBillingFields() {
+                if (!billingForm) return;
+
+                var monthly = Math.max(0, parseFloat(monthlyPrice?.value || 0) || 0);
+                var discount = Math.max(0, Math.min(100, parseFloat(billingForm.dataset.annualDiscount || 20) || 20));
+                var annual = monthly ? monthly * 12 * (1 - discount / 100) : 0;
+                var monthlyAttempts = Math.max(0, parseInt(monthlyExamLimit?.value || 0, 10) || 0);
+
+                if (yearlyPrice) yearlyPrice.value = annual.toFixed(2);
+                if (yearlyExamLimit) yearlyExamLimit.value = String(monthlyAttempts * 12);
+            }
+
+            monthlyPrice?.addEventListener('input', syncDerivedBillingFields);
+            monthlyExamLimit?.addEventListener('input', syncDerivedBillingFields);
+            syncDerivedBillingFields();
+
             document.querySelectorAll('[data-question-limit-toggle]').forEach(function(toggle) {
                 var input = document.querySelector('[data-question-limit-input="' + toggle.value + '"]');
                 if (!input) return;
