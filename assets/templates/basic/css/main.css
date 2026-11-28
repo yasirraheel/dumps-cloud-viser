@@ -9835,6 +9835,87 @@ html:has(.exam-take-page) {
 .exam-action-loader__dots i:nth-child(3) {
     animation-delay: .28s;
 }
+.exam-submit-confirmation[hidden] {
+    display: none !important;
+}
+.exam-submit-confirmation {
+    align-items: center;
+    display: grid;
+    inset: 0;
+    justify-items: center;
+    padding: 18px;
+    position: fixed;
+    visibility: hidden;
+    z-index: 10070;
+}
+.exam-submit-confirmation.is-visible {
+    visibility: visible;
+}
+.exam-submit-confirmation__backdrop {
+    background: hsl(var(--black) / .68);
+    inset: 0;
+    opacity: 0;
+    position: absolute;
+    transition: opacity .2s ease;
+    -webkit-backdrop-filter: blur(7px);
+    backdrop-filter: blur(7px);
+}
+.exam-submit-confirmation.is-visible .exam-submit-confirmation__backdrop {
+    opacity: 1;
+}
+.exam-submit-confirmation__card {
+    animation: exam-confirmation-card-in .25s cubic-bezier(.2,.8,.2,1) both;
+    background: linear-gradient(145deg, hsl(var(--section-bg)), hsl(var(--black) / .94));
+    border: 1px solid hsl(var(--base) / .45);
+    border-radius: 16px;
+    box-shadow: 0 24px 90px hsl(var(--black) / .54), 0 0 34px hsl(var(--base) / .12);
+    max-width: 390px;
+    padding: 24px;
+    position: relative;
+    text-align: center;
+    transform: translateY(8px) scale(.97);
+    transition: transform .2s ease, opacity .2s ease;
+    opacity: 0;
+    width: 100%;
+}
+.exam-submit-confirmation.is-visible .exam-submit-confirmation__card {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+}
+.exam-submit-confirmation__icon {
+    align-items: center;
+    background: hsl(var(--base) / .14);
+    border: 1px solid hsl(var(--base) / .3);
+    border-radius: 50%;
+    color: hsl(var(--base));
+    display: inline-flex;
+    font-size: 24px;
+    height: 52px;
+    justify-content: center;
+    margin-bottom: 12px;
+    width: 52px;
+}
+.exam-submit-confirmation__card h2 {
+    font-size: 1.25rem;
+    margin: 0 0 7px;
+}
+.exam-submit-confirmation__card p {
+    color: hsl(var(--white) / .7);
+    line-height: 1.5;
+    margin: 0 0 20px;
+}
+.exam-submit-confirmation__actions {
+    display: flex;
+    gap: 10px;
+}
+.exam-submit-confirmation__actions .btn {
+    flex: 1 1 0;
+    min-height: 44px;
+}
+@keyframes exam-confirmation-card-in {
+    from { filter: blur(3px); }
+    to { filter: blur(0); }
+}
 @keyframes exam-loader-spin {
     to { transform: rotate(360deg); }
 }
@@ -9880,6 +9961,9 @@ html:has(.exam-take-page) {
         min-width: 0;
         padding: 17px;
         width: min(360px, 100%);
+    }
+    .exam-submit-confirmation__card {
+        padding: 20px;
     }
 }
 .exam-take-page button.btn,

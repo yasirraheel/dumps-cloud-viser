@@ -29,7 +29,7 @@
                             @include('Template::user.exams.partials.question', ['question' => $question, 'questionIndex' => $sessionIndex, 'savedAnswer' => $savedAnswer, 'savedDragData' => $savedDragData, 'revealed' => in_array($sessionIndex, $sessionRevealed), 'dragFeedback' => $dragFeedback])
                         </div>
 
-                        <div class="exam-flow-footer"><button type="button" class="btn btn--dark" id="previousQuestion"><i class="las la-arrow-left" aria-hidden="true"></i><span>@lang('Previous')</span></button><div class="exam-flow-center-actions">@if ($showAnswers)<button type="button" class="btn btn--sm btn-outline--info" id="showAnswer"><i class="las la-lightbulb" aria-hidden="true"></i><span>@lang('Show Answer')</span></button>@endif<button type="button" class="btn btn--sm btn-outline--warning" id="markReview"><i class="las la-flag"></i><span>@lang('Mark for Review')</span></button></div><div class="exam-flow-navigation"><button type="button" class="btn btn--base" id="nextQuestion">@lang('Next')</button><button type="submit" class="btn btn--base d-none" id="submitExam">@lang('Submit Exam')</button></div></div>
+                        <div class="exam-flow-footer"><button type="button" class="btn btn--dark" id="previousQuestion"><i class="las la-arrow-left" aria-hidden="true"></i><span>@lang('Previous')</span></button><div class="exam-flow-center-actions">@if ($showAnswers)<button type="button" class="btn btn--sm btn-outline--info" id="showAnswer"><i class="las la-lightbulb" aria-hidden="true"></i><span>@lang('Show Answer')</span></button>@endif<button type="button" class="btn btn--sm btn-outline--warning" id="markReview"><i class="las la-flag"></i><span>@lang('Mark for Review')</span></button></div><div class="exam-flow-navigation"><button type="button" class="btn btn--base {{ $sessionIndex >= $questionCount - 1 ? 'd-none' : '' }}" id="nextQuestion" @if ($sessionIndex >= $questionCount - 1) hidden @endif>@lang('Next')</button><button type="submit" class="btn btn--base {{ $sessionIndex >= $questionCount - 1 ? '' : 'd-none' }}" id="submitExam" @if ($sessionIndex < $questionCount - 1) hidden @endif>@lang('Submit Exam')</button></div></div>
                     </main>
                     <aside class="exam-flow-sidebar" id="examQuestionSidebar"><div class="exam-question-nav"><div class="exam-question-nav-title">@lang('Questions')</div><div class="exam-question-nav-grid">@for ($key = 0; $key < $questionCount; $key++)<button type="button" class="question-nav-item {{ $key === $sessionIndex ? 'is-current' : '' }} {{ in_array($key, $sessionIncorrect, true) ? 'is-incorrect' : '' }}" data-go-to="{{ $key }}">{{ $key + 1 }}</button>@endfor</div><div class="exam-nav-legend"><span class="legend-dot answered"></span> @lang('Answered') <span class="legend-dot review"></span> @lang('Review') <span class="legend-dot incorrect"></span> @lang('Incorrect')</div></div></aside>
                 </div>
@@ -59,6 +59,18 @@
                         <span class="exam-action-loader__dots" aria-hidden="true"><i></i><i></i><i></i></span>
                     </div>
                 </div>
+                <div class="exam-submit-confirmation" id="examSubmitConfirmation" hidden aria-hidden="true">
+                    <div class="exam-submit-confirmation__backdrop" data-submit-confirmation-cancel></div>
+                    <section class="exam-submit-confirmation__card" role="dialog" aria-modal="true" aria-labelledby="examSubmitConfirmationTitle" aria-describedby="examSubmitConfirmationText">
+                        <span class="exam-submit-confirmation__icon" aria-hidden="true"><i class="las la-check-circle"></i></span>
+                        <h2 id="examSubmitConfirmationTitle">@lang('Submit exam?')</h2>
+                        <p id="examSubmitConfirmationText">@lang('Are you sure you want to submit this exam?')</p>
+                        <div class="exam-submit-confirmation__actions">
+                            <button type="button" class="btn btn--dark" data-submit-confirmation-cancel>@lang('Cancel')</button>
+                            <button type="button" class="btn btn--base" id="confirmSubmitExam">@lang('Submit exam')</button>
+                        </div>
+                    </section>
+                </div>
             </form>
         </div>
     </section>
@@ -84,6 +96,8 @@
                 const actionLoader=document.getElementById('examActionLoader');
                 const actionLoaderTitle=document.getElementById('examActionLoaderTitle');
                 const actionLoaderDetail=document.getElementById('examActionLoaderDetail');
+                const submitConfirmation=document.getElementById('examSubmitConfirmation');
+                const confirmSubmitButton=document.getElementById('confirmSubmitExam');
                 const flowFooter=document.querySelector('.exam-flow-footer');
                 const flowSidebar=document.getElementById('examQuestionSidebar');
                 const mobileToolbar=document.getElementById('examMobileToolbar');
@@ -105,6 +119,19 @@
                     actionLoader.classList.remove('is-visible');
                     actionLoader.setAttribute('aria-hidden','true');
                     actionLoader.hidden=true;
+                }
+                function showSubmitConfirmation(){
+                    if(!submitConfirmation||submitting||submittedByTimer)return;
+                    submitConfirmation.hidden=false;
+                    submitConfirmation.setAttribute('aria-hidden','false');
+                    requestAnimationFrame(()=>submitConfirmation.classList.add('is-visible'));
+                    window.setTimeout(()=>confirmSubmitButton?.focus(),0);
+                }
+                function hideSubmitConfirmation(){
+                    if(!submitConfirmation)return;
+                    submitConfirmation.classList.remove('is-visible');
+                    submitConfirmation.setAttribute('aria-hidden','true');
+                    submitConfirmation.hidden=true;
                 }
                 function syncFullscreenToggle(){
                     if(!fullscreenToggle)return;
@@ -289,7 +316,8 @@
                 }
                 function refresh(keepView=false){
                     nav.forEach((button,index)=>{const incorrect=incorrectIndexes.has(index);button.classList.toggle('is-current',index===current);button.classList.toggle('is-answered',answeredIndexes.has(index)&&!incorrect);button.classList.toggle('is-review',reviewed.has(index));button.classList.toggle('is-incorrect',incorrect);button.disabled=loading});
-                    prev.disabled=loading||current===0;next.disabled=loading;const readyForNext=requiredActionComplete();next.textContent=readyForNext?'@lang('Next')':'@lang('Skip')';next.setAttribute('aria-label',readyForNext?'@lang('Next')':'@lang('Skip')');next.classList.toggle('btn--dark',!readyForNext);next.classList.toggle('btn--base',readyForNext);next.classList.toggle('d-none',current===totalQuestions-1);submit.classList.toggle('d-none',current!==totalQuestions-1);
+                    const isLastQuestion=current>=totalQuestions-1;
+                    prev.disabled=loading||current===0;next.disabled=loading;const readyForNext=requiredActionComplete();next.textContent=readyForNext?'@lang('Next')':'@lang('Skip')';next.setAttribute('aria-label',readyForNext?'@lang('Next')':'@lang('Skip')');next.classList.toggle('btn--dark',!readyForNext);next.classList.toggle('btn--base',readyForNext);next.classList.toggle('d-none',isLastQuestion);next.hidden=isLastQuestion;submit.classList.toggle('d-none',!isLastQuestion);submit.hidden=!isLastQuestion;
                     review.disabled=loading;review.classList.toggle('btn--warning',reviewed.has(current));
                     review.innerHTML=reviewed.has(current)?'<i class="las la-flag"></i><span>@lang('Remove Review')</span>':'<i class="las la-flag"></i><span>@lang('Mark for Review')</span>';
                     if(showAnswer){showAnswer.disabled=loading||revealed.has(current);showAnswer.innerHTML=revealed.has(current)?'<i class="las la-check-circle" aria-hidden="true"></i><span>@lang('Answer revealed')</span>':'<i class="las la-lightbulb" aria-hidden="true"></i><span>@lang('Show Answer')</span>'}
@@ -719,7 +747,20 @@
                 });
                 window.addEventListener('blur',()=>setPaused(true));
                 window.addEventListener('pagehide',()=>setPaused(true));
-                form?.addEventListener('submit',async event=>{if(submittedByTimer){attemptedIndexes.add(current);showActionLoader('@lang('Submitting exam')','@lang('Your answers are being submitted.')');return}event.preventDefault();if(submitting)return;submitting=true;attemptedIndexes.add(current);showActionLoader('@lang('Submitting exam')','@lang('Your answers are being submitted.')');form.querySelectorAll('button[type="submit"]').forEach(button=>{button.disabled=true;button.innerHTML='<i class="las la-spinner la-spin"></i> @lang('Submitting...')'});await persistSession();HTMLFormElement.prototype.submit.call(form)});
+                async function submitExam(){
+                    if(submitting)return;
+                    submitting=true;
+                    hideSubmitConfirmation();
+                    attemptedIndexes.add(current);
+                    showActionLoader('@lang('Submitting exam')','@lang('Your answers are being submitted.')');
+                    form.querySelectorAll('button[type="submit"]').forEach(button=>{button.disabled=true;button.innerHTML='<i class="las la-spinner la-spin"></i> @lang('Submitting...')'});
+                    await persistSession();
+                    HTMLFormElement.prototype.submit.call(form);
+                }
+                submitConfirmation?.querySelectorAll('[data-submit-confirmation-cancel]').forEach(button=>button.addEventListener('click',hideSubmitConfirmation));
+                confirmSubmitButton?.addEventListener('click',submitExam);
+                document.addEventListener('keydown',event=>{if(event.key==='Escape'&&!submitConfirmation?.hidden)hideSubmitConfirmation()});
+                form?.addEventListener('submit',async event=>{if(submittedByTimer){attemptedIndexes.add(current);showActionLoader('@lang('Submitting exam')','@lang('Your answers are being submitted.')');return}event.preventDefault();if(submitting)return;showSubmitConfirmation()});
                 function tick(){if(secondsRemaining===null||secondsRemaining===undefined||timerPaused||dragConfirmationPending)return;if(Number(secondsRemaining)<=0){if(!submittedByTimer){submittedByTimer=true;showActionLoader('@lang('Time is up')','@lang('Your exam is being submitted.')');persistSession().finally(()=>HTMLFormElement.prototype.submit.call(form))}return}secondsRemaining=Number(secondsRemaining)-1;renderClock();if(secondsRemaining%5===0&&!step()?.querySelector('.drag-question'))persistSession()}
                 bindCurrent();renderClock();updatePauseDialog();if(timerPaused)persistSession();if(secondsRemaining!==null&&secondsRemaining!==undefined){tick();setInterval(tick,1000)}
                 if(revealed.has(current))revealCurrent();
