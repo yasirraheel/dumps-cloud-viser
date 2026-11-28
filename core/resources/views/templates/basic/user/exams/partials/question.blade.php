@@ -8,8 +8,6 @@
     $dragItems = $answerData['items'] ?? [];
     $dragTargets = $answerData['targets'] ?? [];
     $savedOptionIds = is_array($savedAnswer) ? array_map('intval', $savedAnswer) : (($savedAnswer !== null && $savedAnswer !== '') ? [(int) $savedAnswer] : []);
-    {{-- Exam content must be rendered exactly as stored. The translation helper
-         can replace numeric option text with unrelated language strings. --}}
     $questionTitle = (string) $question->title;
     $questionTitleLines = preg_split('/\\R/u', trim($questionTitle)) ?: [];
     $nonEmptyQuestionTitleLines = array_values(array_filter(array_map('trim', $questionTitleLines), static fn ($line) => $line !== ''));
