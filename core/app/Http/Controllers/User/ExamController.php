@@ -79,6 +79,7 @@ class ExamController extends Controller {
 
     private function renderAttempt(Exam $exam, AttendExam $attendExam, string $pageTitle) {
         $user = auth()->user();
+        [$examAccessToken, $examAccessTokenExpires] = $this->examAccessCredentials($attendExam);
         $availableQuestionCount = count($this->orderedQuestionIds($exam));
         $allQuestionIds = $this->attemptQuestionIds($exam, $attendExam);
         // Keep older in-progress attempts resumable with their original admin duration.
@@ -149,7 +150,8 @@ class ExamController extends Controller {
         return view('Template::user.exams.start', compact(
             'pageTitle', 'exam', 'attendExam', 'question', 'questionCount', 'savedAnswer', 'savedDragData',
             'sessionIndex', 'sessionRemaining', 'sessionPaused', 'sessionFlagged', 'sessionRevealed', 'sessionAttempted', 'answeredIndexes',
-            'sessionCommitted', 'sessionIncorrect', 'settings', 'showAnswers', 'showLiveScore', 'timerLabel', 'liveScore', 'dragFeedback', 'availableQuestionCount'
+            'sessionCommitted', 'sessionIncorrect', 'settings', 'showAnswers', 'showLiveScore', 'timerLabel', 'liveScore', 'dragFeedback', 'availableQuestionCount',
+            'examAccessToken', 'examAccessTokenExpires'
         ));
     }
 
@@ -157,6 +159,36 @@ class ExamController extends Controller {
         return AttendExam::where('user_id', auth()->id())
             ->where('is_submit', Status::NO)
             ->findOrFail($id);
+    }
+
+    private function examAccessCredentials(AttendExam $attempt): array
+    {
+        $expires = now()->addHours(4)->timestamp;
+        $payload = implode('|', [$attempt->id, $attempt->user_id, $expires]);
+
+        return [$this->signExamAccessPayload($payload), $expires];
+    }
+
+    private function signExamAccessPayload(string $payload): string
+    {
+        return hash_hmac('sha256', $payload, (string) config('app.key'));
+    }
+
+    private function validateExamAccess(Request $request, AttendExam $attempt): void
+    {
+        $expires = (int) ($request->header('X-Exam-Access-Expires') ?: $request->input('exam_access_expires'));
+        $token = (string) ($request->header('X-Exam-Access') ?: $request->input('exam_access_token'));
+        $now = now()->timestamp;
+        $payload = implode('|', [$attempt->id, $attempt->user_id, $expires]);
+
+        abort_unless(
+            $expires >= $now
+            && $expires <= $now + (4 * 60 * 60) + 30
+            && $token !== ''
+            && hash_equals($this->signExamAccessPayload($payload), $token),
+            403,
+            'This exam session access token is invalid or expired.'
+        );
     }
 
     private function dragDropFeedbackForQuestion(Question $question, array $submitted): array {
@@ -278,6 +310,7 @@ class ExamController extends Controller {
 
     public function revealAnswer(Request $request, $id, $index) {
         $attempt = $this->activeAttempt($id);
+        $this->validateExamAccess($request, $attempt);
         $exam = Exam::active()->running()->whereKey($attempt->exam_id)->firstOrFail();
         $allQuestionIds = $this->attemptQuestionIds($exam, $attempt);
         $flowIds = $this->flowQuestionIds($allQuestionIds, $attempt);
@@ -352,6 +385,7 @@ class ExamController extends Controller {
 
     public function confirmDragDrop(Request $request, $id, $index) {
         $attempt = $this->activeAttempt($id);
+        $this->validateExamAccess($request, $attempt);
         $exam = Exam::active()->running()->whereKey($attempt->exam_id)->firstOrFail();
         $allQuestionIds = $this->attemptQuestionIds($exam, $attempt);
         $flowIds = $this->flowQuestionIds($allQuestionIds, $attempt);
@@ -420,6 +454,7 @@ class ExamController extends Controller {
 
     public function question($id, $index) {
         $attendExam = $this->activeAttempt($id);
+        $this->validateExamAccess(request(), $attendExam);
         $exam = Exam::active()->running()->whereKey($attendExam->exam_id)->firstOrFail();
         $index = (int) $index;
 
@@ -460,6 +495,7 @@ class ExamController extends Controller {
 
     public function saveSession(Request $request, $id) {
         $attendExam = $this->activeAttempt($id);
+        $this->validateExamAccess($request, $attendExam);
         $exam = Exam::active()->running()->whereKey($attendExam->exam_id)->firstOrFail();
 
         $allQuestionIds = $this->attemptQuestionIds($exam, $attendExam);
@@ -536,8 +572,48 @@ class ExamController extends Controller {
         ]);
     }
 
+    public function securityEvent(Request $request, $id)
+    {
+        $attempt = $this->activeAttempt($id);
+        $this->validateExamAccess($request, $attempt);
+
+        $allowedEvents = [
+            'contextmenu', 'copy', 'cut', 'paste', 'dragstart', 'print_attempt',
+            'shortcut_attempt', 'visibility_hidden', 'window_blur', 'fullscreen_exit',
+            'devtools_suspected',
+        ];
+        $event = (string) $request->input('event');
+        abort_unless(in_array($event, $allowedEvents, true), 422, 'Invalid security event.');
+
+        $metadata = $request->input('metadata');
+        if (is_array($metadata)) {
+            $metadata = json_encode($metadata, JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE);
+        } else {
+            $metadata = substr((string) $metadata, 0, 2000);
+        }
+
+        DB::table('exam_security_events')->insert([
+            'attend_exam_id' => $attempt->id,
+            'user_id' => auth()->id(),
+            'event' => $event,
+            'metadata' => $metadata ?: null,
+            'ip_address' => $request->ip(),
+            'user_agent' => substr((string) $request->userAgent(), 0, 1000),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        if (in_array($event, ['visibility_hidden', 'window_blur', 'fullscreen_exit', 'devtools_suspected'], true)) {
+            $attempt->is_paused = Status::YES;
+            $attempt->save();
+        }
+
+        return response()->json(['success' => true]);
+    }
+
     public function submit(Request $request, $id) {
         $submitExam = $this->activeAttempt($id);
+        $this->validateExamAccess($request, $submitExam);
         $exam = Exam::active()->running()->whereKey($submitExam->exam_id)->firstOrFail();
 
         $allQuestionIds = $this->attemptQuestionIds($exam, $submitExam);

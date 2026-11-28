@@ -1,11 +1,22 @@
 @extends('Template::layouts.frontend')
 
 @section('content')
-    @php $optionLetters = range('A', 'Z'); $sessionAnswers = []; $sessionAnswerData = []; $availableQuestionCount = $availableQuestionCount ?? $questionCount; @endphp
+    @php
+        $optionLetters = range('A', 'Z');
+        $sessionAnswers = [];
+        $sessionAnswerData = [];
+        $availableQuestionCount = $availableQuestionCount ?? $questionCount;
+        $securityUser = auth()->user();
+        $securityUserName = trim(collect([$securityUser?->firstname, $securityUser?->lastname])->filter()->implode(' '));
+        $securityIdentity = $securityUserName ?: ($securityUser?->username ?: ($securityUser?->email ?: 'Exam user'));
+        $securityWatermarkLabel = trim($securityIdentity . ' · ' . ($securityUser?->email ?: ''));
+    @endphp
     <section class="exam-section exam-take-page exam-flow my-60">
         <div class="container">
             <form action="{{ route('user.exam.submit', $attendExam->id) }}" method="POST" id="examForm">
                 @csrf
+                <input type="hidden" name="exam_access_token" value="{{ $examAccessToken }}">
+                <input type="hidden" name="exam_access_expires" value="{{ $examAccessTokenExpires }}">
                 <header class="exam-flow-header">
                     <div class="exam-flow-heading">
                         <span class="exam-kicker">{{ __($exam->category?->name ?? 'Exam') }}</span>
@@ -22,6 +33,12 @@
                         </button>
                     </div>
                 </header>
+
+                <div class="exam-security-watermark" id="examSecurityWatermark" aria-hidden="true">
+                    <span>{{ $securityWatermarkLabel }}</span>
+                    <span>Exam session #{{ $attendExam->id }}</span>
+                    <span data-security-watermark-time></span>
+                </div>
 
                 <div class="exam-flow-layout">
                     <main class="exam-flow-main">
@@ -58,6 +75,15 @@
                         <span class="exam-action-loader__copy"><strong id="examActionLoaderTitle">@lang('Working on it')</strong><span id="examActionLoaderDetail">@lang('Please wait while this finishes.')</span></span>
                         <span class="exam-action-loader__dots" aria-hidden="true"><i></i><i></i><i></i></span>
                     </div>
+                </div>
+                <div class="exam-security-overlay" id="examSecurityOverlay" hidden aria-hidden="true">
+                    <div class="exam-security-overlay__backdrop"></div>
+                    <section class="exam-security-overlay__card" role="alertdialog" aria-modal="true" aria-labelledby="examSecurityTitle" aria-describedby="examSecurityText">
+                        <span class="exam-security-overlay__icon" aria-hidden="true"><i class="las la-shield-alt"></i></span>
+                        <h2 id="examSecurityTitle">@lang('Exam screen protected')</h2>
+                        <p id="examSecurityText">@lang('Copying, printing, screen capture, and leaving the exam window are restricted. Your exam has been paused.')</p>
+                        <button type="button" class="btn btn--base" id="resumeFromSecurityOverlay">@lang('Return to exam')</button>
+                    </section>
                 </div>
                 <div class="exam-submit-confirmation" id="examSubmitConfirmation" hidden aria-hidden="true">
                     <div class="exam-submit-confirmation__backdrop" data-submit-confirmation-cancel></div>
@@ -96,6 +122,9 @@
                 const actionLoader=document.getElementById('examActionLoader');
                 const actionLoaderTitle=document.getElementById('examActionLoaderTitle');
                 const actionLoaderDetail=document.getElementById('examActionLoaderDetail');
+                const securityOverlay=document.getElementById('examSecurityOverlay');
+                const securityOverlayText=document.getElementById('examSecurityText');
+                const resumeFromSecurityOverlay=document.getElementById('resumeFromSecurityOverlay');
                 const submitConfirmation=document.getElementById('examSubmitConfirmation');
                 const confirmSubmitButton=document.getElementById('confirmSubmitExam');
                 const flowFooter=document.querySelector('.exam-flow-footer');
@@ -155,7 +184,19 @@
                     }catch(error){notify('error','@lang('Unable to open fullscreen mode in this browser.')')}
                     finally{hideActionLoader()}
                 });
-                document.addEventListener('fullscreenchange',syncFullscreenToggle);
+                document.addEventListener('fullscreenchange',()=>{
+                    syncFullscreenToggle();
+                    const isFullscreen=document.fullscreenElement===examSurface;
+                    if(isFullscreen){
+                        hasEnteredFullscreen=true;
+                        return;
+                    }
+                    if(hasEnteredFullscreen&&!submitting&&!submittedByTimer){
+                        setPaused(true,false);
+                        showSecurityOverlay('fullscreen_exit');
+                        persistSession();
+                    }
+                });
                 syncFullscreenToggle();
                 function arrangeMobileExam(){
                     if(mobileLayoutQuery.matches){
@@ -184,7 +225,11 @@
                 const answerUrl='{{ route('user.exam.answer.reveal', ['id' => $attendExam->id, 'index' => '__INDEX__'], false) }}';
                 const dragConfirmUrl='{{ route('user.exam.drag-drop.confirm', ['id' => $attendExam->id, 'index' => '__INDEX__'], false) }}';
                 const saveUrl='{{ route('user.exam.session.save', $attendExam->id, false) }}';
+                const securityEventUrl='{{ route('user.exam.security.event', $attendExam->id, false) }}';
                 const csrfToken=document.querySelector('meta[name="csrf-token"]')?.content||'{{ csrf_token() }}';
+                const examAccessToken=@json($examAccessToken);
+                const examAccessExpires=@json($examAccessTokenExpires);
+                const examAccessHeaders=(extra={})=>({'X-Exam-Access':examAccessToken,'X-Exam-Access-Expires':String(examAccessExpires),...extra});
                 const inlineFeedback=@json((bool) ($settings['inline_feedback'] ?? false));
                 let current=Number(@json($sessionIndex))||0;
                 let reviewed=new Set((@json($sessionFlagged)||[]).map(Number));
@@ -195,7 +240,38 @@
                 let answeredIndexes=new Set((@json($answeredIndexes)||[]).map(Number));
                 let secondsRemaining=@json($sessionRemaining);
                 let timerPaused=Boolean(@json($sessionPaused))||document.hidden,loading=false,submitting=false,submittedByTimer=false;
-                let sessionSaveQueue=Promise.resolve(),dragConfirmationPending=false;
+                let sessionSaveQueue=Promise.resolve(),dragConfirmationPending=false,hasEnteredFullscreen=false,securityOverlayOpen=false,securityNoticeTimer=null;
+                const securityEventCooldowns=new Map();
+                function logSecurityEvent(event,metadata={}){
+                    const now=Date.now(),last=securityEventCooldowns.get(event)||0;
+                    if(now-last<1500||!securityEventUrl)return;
+                    securityEventCooldowns.set(event,now);
+                    fetch(securityEventUrl,{method:'POST',keepalive:true,headers:examAccessHeaders({'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':csrfToken,'X-Requested-With':'XMLHttpRequest'}),body:JSON.stringify({event,metadata})}).catch(()=>null);
+                }
+                function showSecurityOverlay(event,metadata={},temporary=false){
+                    if(!securityOverlay)return;
+                    if(securityNoticeTimer)window.clearTimeout(securityNoticeTimer);
+                    securityOverlayOpen=true;
+                    if(securityOverlayText)securityOverlayText.textContent=temporary
+                        ?'This exam content is protected. Copying, printing, and screen capture are restricted.'
+                        :'Copying, printing, screen capture, and leaving the exam window are restricted. Your exam has been paused.';
+                    securityOverlay.hidden=false;
+                    securityOverlay.setAttribute('aria-hidden','false');
+                    requestAnimationFrame(()=>securityOverlay.classList.add('is-visible'));
+                    logSecurityEvent(event,metadata);
+                    if(temporary)securityNoticeTimer=window.setTimeout(hideSecurityOverlay,2600);
+                }
+                function hideSecurityOverlay(){
+                    if(!securityOverlay)return;
+                    securityOverlayOpen=false;
+                    securityOverlay.classList.remove('is-visible');
+                    securityOverlay.setAttribute('aria-hidden','true');
+                    securityOverlay.hidden=true;
+                }
+                function updateWatermarkClock(){
+                    const node=document.querySelector('[data-security-watermark-time]');
+                    if(node)node.textContent=new Date().toLocaleString();
+                }
                 const step=()=>container?.querySelector('.exam-step');
                 function hasAnswer(node=step()){
                     if(!node)return false;
@@ -299,7 +375,7 @@
                     if(!saveUrl||!form||!step()||dragConfirmationPending)return null;
                     try{
                         sessionSaveQueue=sessionSaveQueue.catch(()=>null).then(async()=>{
-                            const {response,payload}=await fetchJsonWithTimeout(saveUrl,{method:'POST',keepalive:true,headers:{'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':csrfToken,'Cache-Control':'no-cache'},body:JSON.stringify(sessionPayload())},7000);
+                            const {response,payload}=await fetchJsonWithTimeout(saveUrl,{method:'POST',keepalive:true,headers:examAccessHeaders({'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':csrfToken,'Cache-Control':'no-cache'}),body:JSON.stringify(sessionPayload())},7000);
                             return response.ok?payload:null;
                         }).catch(()=>null);
                         const payload=await sessionSaveQueue;
@@ -379,7 +455,7 @@
                     if(ownsLoading){loading=true;refresh();showActionLoader('@lang('Checking answer')','@lang('Your answer is being checked.')')}
                     const payload=currentPayload();
                     try{
-                        const {response,payload:result}=await fetchJsonWithTimeout(answerUrl.replace('__INDEX__',String(current)),{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':csrfToken,'X-Requested-With':'XMLHttpRequest'},body:JSON.stringify({answer:payload.answer,answer_data:payload.answerData})},8000);
+                        const {response,payload:result}=await fetchJsonWithTimeout(answerUrl.replace('__INDEX__',String(current)),{method:'POST',headers:examAccessHeaders({'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':csrfToken,'X-Requested-With':'XMLHttpRequest'}),body:JSON.stringify({answer:payload.answer,answer_data:payload.answerData})},8000);
                         if(!response.ok)throw new Error('Unable to check this answer');
                         const wasAnswered=hasAnswer();revealed.add(current);committed.add(current);attemptedIndexes.add(current);if(wasAnswered)answeredIndexes.add(current);
                         if(result.is_correct)incorrectIndexes.delete(current);else if(wasAnswered)incorrectIndexes.add(current);else incorrectIndexes.delete(current);
@@ -519,7 +595,7 @@
                         try{
                             const {response,payload:result}=await fetchJsonWithTimeout(dragConfirmUrl.replace('__INDEX__',String(confirmedIndex)),{
                                 method:'POST',
-                                headers:{'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':csrfToken,'X-Requested-With':'XMLHttpRequest'},
+                                headers:examAccessHeaders({'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':csrfToken,'X-Requested-With':'XMLHttpRequest'}),
                                 body:JSON.stringify({answer:1,answer_data:submitted})
                             },6000);
                             if(!response.ok)throw new Error('Unable to confirm these matches.');
@@ -712,7 +788,7 @@
                         // Keep the loader visible until the returned score has
                         // been painted before replacing the question content.
                         await waitForScorePaint();
-                        const {response,payload}=await fetchJsonWithTimeout(questionUrl.replace('__INDEX__',String(index)),{headers:{Accept:'application/json','X-Requested-With':'XMLHttpRequest','Cache-Control':'no-cache'}},12000);
+                        const {response,payload}=await fetchJsonWithTimeout(questionUrl.replace('__INDEX__',String(index)),{headers:examAccessHeaders({Accept:'application/json','X-Requested-With':'XMLHttpRequest','Cache-Control':'no-cache'})},12000);
                         if(!response.ok)throw new Error('Question request failed');
                         container.innerHTML=payload.html;current=index;
                         if(payload.answered)answeredIndexes.add(index);else answeredIndexes.delete(index);
@@ -743,11 +819,82 @@
                 });
                 showAnswer?.addEventListener('click',revealCurrent);
                 document.addEventListener('visibilitychange',()=>{
-                    if(document.hidden)setPaused(true);
-                    else{updatePauseDialog();renderClock();if(timerPaused)persistSession()}
+                    if(document.hidden){
+                        setPaused(true,false);
+                        showSecurityOverlay('visibility_hidden');
+                        persistSession();
+                    }else{
+                        updatePauseDialog();
+                        renderClock();
+                        if(timerPaused)persistSession();
+                    }
                 });
-                window.addEventListener('blur',()=>setPaused(true));
-                window.addEventListener('pagehide',()=>setPaused(true));
+                function isExamContentTarget(target){
+                    const pageTarget=!target||target===document||target===document.body;
+                    return Boolean(examSurface&&(pageTarget||examSurface.contains(target))&&!securityOverlay?.contains(target));
+                }
+                function handleBlockedInteraction(eventName,event,temporary=true){
+                    if(eventName==='dragstart'&&event?.target?.closest('.drag-item'))return;
+                    if(event)event.preventDefault();
+                    showSecurityOverlay(eventName,{target:event?.target?.nodeName||null},temporary);
+                }
+                ['contextmenu','copy','cut','paste','selectstart','dragstart'].forEach(eventName=>{
+                    document.addEventListener(eventName,event=>{
+                        if(isExamContentTarget(event.target))handleBlockedInteraction(eventName,event,true);
+                    },true);
+                });
+                document.addEventListener('keydown',event=>{
+                    if(event.key==='Escape'&&!submitConfirmation?.hidden){hideSubmitConfirmation();return}
+                    const key=String(event.key||'').toLowerCase();
+                    const modifier=event.ctrlKey||event.metaKey;
+                    const blocked=key==='f12'||key==='printscreen'||key==='snapshot'
+                        ||(modifier&&['a','c','p','s','u','x'].includes(key))
+                        ||(modifier&&event.shiftKey&&['i','j','c','s'].includes(key));
+                    if(blocked&&isExamContentTarget(event.target)){
+                        event.preventDefault();
+                        event.stopPropagation();
+                        const eventName=key==='printscreen'||key==='snapshot'?'print_attempt':'shortcut_attempt';
+                        setPaused(true,false);
+                        showSecurityOverlay(eventName,{key,ctrl:event.ctrlKey,meta:event.metaKey,shift:event.shiftKey},false);
+                        persistSession();
+                    }
+                },true);
+                window.addEventListener('beforeprint',()=>{
+                    setPaused(true,false);
+                    showSecurityOverlay('print_attempt',{},false);
+                    persistSession();
+                });
+                window.addEventListener('blur',()=>{
+                    if(!submitting&&!submittedByTimer){
+                        setPaused(true,false);
+                        showSecurityOverlay('window_blur',{},false);
+                        persistSession();
+                    }
+                });
+                window.addEventListener('pagehide',()=>{
+                    if(!submitting&&!submittedByTimer){
+                        setPaused(true,false);
+                        logSecurityEvent('visibility_hidden',{reason:'pagehide'});
+                        persistSession();
+                    }
+                });
+                resumeFromSecurityOverlay?.addEventListener('click',async()=>{
+                    hideSecurityOverlay();
+                    await handlePauseAction(false);
+                });
+                let devtoolsSuspected=false;
+                window.setInterval(()=>{
+                    const widthGap=Math.max(0,(window.outerWidth||0)-(window.innerWidth||0));
+                    const suspected=widthGap>320&&!document.fullscreenElement&&document.visibilityState==='visible';
+                    if(suspected&&!devtoolsSuspected&&!submitting&&!submittedByTimer){
+                        devtoolsSuspected=true;
+                        setPaused(true,false);
+                        showSecurityOverlay('devtools_suspected',{width_gap:widthGap},false);
+                        persistSession();
+                    }else if(!suspected){
+                        devtoolsSuspected=false;
+                    }
+                },1500);
                 async function submitExam(){
                     if(submitting)return;
                     submitting=true;
@@ -760,10 +907,9 @@
                 }
                 submitConfirmation?.querySelectorAll('[data-submit-confirmation-cancel]').forEach(button=>button.addEventListener('click',hideSubmitConfirmation));
                 confirmSubmitButton?.addEventListener('click',submitExam);
-                document.addEventListener('keydown',event=>{if(event.key==='Escape'&&!submitConfirmation?.hidden)hideSubmitConfirmation()});
                 form?.addEventListener('submit',async event=>{if(submittedByTimer){attemptedIndexes.add(current);showActionLoader('@lang('Submitting exam')','@lang('Your answers are being submitted.')');return}event.preventDefault();if(submitting)return;showSubmitConfirmation()});
                 function tick(){if(secondsRemaining===null||secondsRemaining===undefined||timerPaused||dragConfirmationPending)return;if(Number(secondsRemaining)<=0){if(!submittedByTimer){submittedByTimer=true;showActionLoader('@lang('Time is up')','@lang('Your exam is being submitted.')');persistSession().finally(()=>HTMLFormElement.prototype.submit.call(form))}return}secondsRemaining=Number(secondsRemaining)-1;renderClock();if(secondsRemaining%5===0&&!step()?.querySelector('.drag-question'))persistSession()}
-                bindCurrent();renderClock();updatePauseDialog();if(timerPaused)persistSession();if(secondsRemaining!==null&&secondsRemaining!==undefined){tick();setInterval(tick,1000)}
+                bindCurrent();renderClock();updatePauseDialog();updateWatermarkClock();setInterval(updateWatermarkClock,30000);if(timerPaused)persistSession();if(secondsRemaining!==null&&secondsRemaining!==undefined){tick();setInterval(tick,1000)}
                 if(revealed.has(current))revealCurrent();
             })();
         </script>

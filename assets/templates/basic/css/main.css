@@ -10433,3 +10433,132 @@ html:has(.exam-take-page) {
     outline: 2px solid hsl(var(--base));
     outline-offset: 2px;
 }
+
+/* Exam protection: deterrence overlays and a persistent, theme-aware watermark. */
+.exam-take-page {
+    -webkit-user-select: none;
+    user-select: none;
+}
+
+.exam-take-page img,
+.exam-take-page .exam-option-text,
+.exam-take-page .exam-qsn-title,
+.exam-take-page .exam-cli-snippet,
+.exam-take-page .drag-text {
+    -webkit-user-drag: none;
+}
+
+.exam-take-page .exam-security-watermark {
+    align-items: center;
+    display: grid;
+    gap: clamp(42px, 7vw, 120px);
+    grid-template-columns: repeat(3, max-content);
+    inset: 0;
+    justify-content: center;
+    overflow: hidden;
+    pointer-events: none;
+    position: fixed;
+    transform: rotate(-19deg) scale(1.35);
+    user-select: none;
+    z-index: 10030;
+}
+
+.exam-security-watermark span {
+    color: hsl(var(--base));
+    font-size: clamp(12px, 1.05vw, 17px);
+    font-weight: 700;
+    letter-spacing: .04em;
+    opacity: .12;
+    text-transform: none;
+    white-space: nowrap;
+}
+
+.exam-security-overlay[hidden] {
+    display: none !important;
+}
+
+.exam-security-overlay {
+    align-items: center;
+    display: grid;
+    inset: 0;
+    justify-items: center;
+    padding: 18px;
+    position: fixed;
+    visibility: hidden;
+    z-index: 10080;
+}
+
+.exam-security-overlay.is-visible {
+    visibility: visible;
+}
+
+.exam-security-overlay__backdrop {
+    background: hsl(var(--black) / .76);
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
+    inset: 0;
+    opacity: 0;
+    position: absolute;
+    transition: opacity .2s ease;
+}
+
+.exam-security-overlay.is-visible .exam-security-overlay__backdrop {
+    opacity: 1;
+}
+
+.exam-security-overlay__card {
+    animation: exam-confirmation-card-in .25s cubic-bezier(.2,.8,.2,1) both;
+    background: linear-gradient(145deg, hsl(var(--section-bg)), hsl(var(--black) / .96));
+    border: 1px solid hsl(var(--base) / .56);
+    border-radius: 18px;
+    box-shadow: 0 24px 90px hsl(var(--black) / .58), 0 0 36px hsl(var(--base) / .16);
+    max-width: 430px;
+    padding: 28px;
+    position: relative;
+    text-align: center;
+    transform: translateY(8px) scale(.97);
+    transition: transform .2s ease, opacity .2s ease;
+    opacity: 0;
+    width: 100%;
+}
+
+.exam-security-overlay.is-visible .exam-security-overlay__card {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+}
+
+.exam-security-overlay__icon {
+    align-items: center;
+    background: hsl(var(--base) / .14);
+    border: 1px solid hsl(var(--base) / .35);
+    border-radius: 50%;
+    color: hsl(var(--base));
+    display: inline-flex;
+    font-size: 26px;
+    height: 56px;
+    justify-content: center;
+    margin-bottom: 14px;
+    width: 56px;
+}
+
+.exam-security-overlay__card h2 {
+    font-size: 1.3rem;
+    margin: 0 0 8px;
+}
+
+.exam-security-overlay__card p {
+    color: hsl(var(--white) / .72);
+    line-height: 1.55;
+    margin: 0 0 20px;
+}
+
+.exam-security-overlay__card .btn {
+    min-height: 44px;
+    width: 100%;
+}
+
+@media print {
+    .exam-take-page {
+        display: none !important;
+    }
+}

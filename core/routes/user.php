@@ -79,11 +79,12 @@ Route::middleware('auth')->name('user.')->group(function () {
                 Route::get('resume/{id}', 'resume')->name('resume');
                 Route::post('begin/{slug}', 'begin')->name('begin');
                 Route::post('delete/{id}', 'deleteAttempt')->name('delete');
-                Route::get('attempt/{id}/question/{index}', 'question')->name('question');
-                Route::post('attempt/{id}/answer/{index}', 'revealAnswer')->name('answer.reveal');
-                Route::post('attempt/{id}/confirm-drag-drop/{index}', 'confirmDragDrop')->name('drag-drop.confirm');
-                Route::post('attempt/{id}/session', 'saveSession')->name('session.save');
-                Route::post('attempt/{id}/submit', 'submit')->name('submit');
+                Route::get('attempt/{id}/question/{index}', 'question')->name('question')->middleware('throttle:120,1');
+                Route::post('attempt/{id}/answer/{index}', 'revealAnswer')->name('answer.reveal')->middleware('throttle:60,1');
+                Route::post('attempt/{id}/confirm-drag-drop/{index}', 'confirmDragDrop')->name('drag-drop.confirm')->middleware('throttle:60,1');
+                Route::post('attempt/{id}/session', 'saveSession')->name('session.save')->middleware('throttle:120,1');
+                Route::post('attempt/{id}/security-event', 'securityEvent')->name('security.event')->middleware('throttle:60,1');
+                Route::post('attempt/{id}/submit', 'submit')->name('submit')->middleware('throttle:10,1');
                 Route::get('certificate/download/{slug}', 'certificateDownload')->name('certificate.download');
             });
             Route::controller('ProfileController')->group(function () {
