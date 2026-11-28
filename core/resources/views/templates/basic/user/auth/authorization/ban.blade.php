@@ -2,6 +2,7 @@
 @section('content')
     @php
         $bannedContent = getContent('banned.content', true);
+        $examSecuritySuspension = \Illuminate\Support\Str::startsWith((string) $user->ban_reason, 'Automated exam security suspension:');
     @endphp
     <section class="my-120">
         <div class="container">
@@ -11,7 +12,10 @@
                         <img src="{{ frontendImage('banned', $bannedContent?->data_values?->image ?? '') }}" alt="image">
                     </div>
                     <div class="mt-5 text-center">
-                        <h3 class="text--danger pb-2">@lang('You are banned')</h3>
+                        <h3 class="text--danger pb-2">{{ $examSecuritySuspension ? __('Exam access suspended') : __('You are banned') }}</h3>
+                        @if ($examSecuritySuspension)
+                            <p class="mb-3">@lang('Your account was suspended because our exam protection detected repeated attempts to use unfair means. Please contact the admin team if you believe this was a mistake.')</p>
+                        @endif
                         <p class="fw-bold mb-1">@lang('Reason'):</p>
                         <p>{{ $user->ban_reason }}</p>
                     </div>

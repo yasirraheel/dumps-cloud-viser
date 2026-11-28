@@ -102,6 +102,11 @@ Route::middleware('admin')->group(function () {
         Route::post('generate/question/{exam_id}', 'questionGenerate')->name('question.generate');
     });
 
+    Route::controller('ExamSecurityController')->name('exams.security.')->prefix('exams/security')->group(function () {
+        Route::get('/', 'index')->name('index');
+        Route::post('settings', 'updateSettings')->name('settings');
+    });
+
     Route::controller('PlanController')->name('plan.')->prefix('plan')->group(function () {
         Route::get('index', 'index')->name('index');
         Route::get('add/{id?}', 'add')->name('add');

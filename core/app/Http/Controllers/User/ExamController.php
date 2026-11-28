@@ -80,6 +80,7 @@ class ExamController extends Controller {
     private function renderAttempt(Exam $exam, AttendExam $attendExam, string $pageTitle) {
         $user = auth()->user();
         [$examAccessToken, $examAccessTokenExpires] = $this->examAccessCredentials($attendExam);
+        $examSecurityEnabled = (bool) (gs()->exam_security_enabled ?? true);
         $availableQuestionCount = count($this->orderedQuestionIds($exam));
         $allQuestionIds = $this->attemptQuestionIds($exam, $attendExam);
         // Keep older in-progress attempts resumable with their original admin duration.
@@ -151,7 +152,7 @@ class ExamController extends Controller {
             'pageTitle', 'exam', 'attendExam', 'question', 'questionCount', 'savedAnswer', 'savedDragData',
             'sessionIndex', 'sessionRemaining', 'sessionPaused', 'sessionFlagged', 'sessionRevealed', 'sessionAttempted', 'answeredIndexes',
             'sessionCommitted', 'sessionIncorrect', 'settings', 'showAnswers', 'showLiveScore', 'timerLabel', 'liveScore', 'dragFeedback', 'availableQuestionCount',
-            'examAccessToken', 'examAccessTokenExpires'
+            'examAccessToken', 'examAccessTokenExpires', 'examSecurityEnabled'
         ));
     }
 
@@ -577,11 +578,18 @@ class ExamController extends Controller {
         $attempt = $this->activeAttempt($id);
         $this->validateExamAccess($request, $attempt);
 
-        $allowedEvents = [
-            'contextmenu', 'copy', 'cut', 'paste', 'dragstart', 'print_attempt',
-            'shortcut_attempt', 'visibility_hidden', 'window_blur', 'fullscreen_exit',
-            'devtools_suspected',
+        $violationEvents = [
+            'contextmenu', 'copy', 'cut', 'paste', 'print_attempt',
+            'shortcut_attempt', 'fullscreen_exit', 'devtools_suspected',
         ];
+        $allowedEvents = array_merge($violationEvents, [
+            'visibility_hidden', 'window_blur', 'dragstart',
+        ]);
+        $settings = gs();
+        if (!(bool) ($settings->exam_security_enabled ?? true)) {
+            return response()->json(['success' => true, 'enforced' => false]);
+        }
+
         $event = (string) $request->input('event');
         abort_unless(in_array($event, $allowedEvents, true), 422, 'Invalid security event.');
 
@@ -592,23 +600,66 @@ class ExamController extends Controller {
             $metadata = substr((string) $metadata, 0, 2000);
         }
 
-        DB::table('exam_security_events')->insert([
-            'attend_exam_id' => $attempt->id,
-            'user_id' => auth()->id(),
-            'event' => $event,
-            'metadata' => $metadata ?: null,
-            'ip_address' => $request->ip(),
-            'user_agent' => substr((string) $request->userAgent(), 0, 1000),
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
+        $violationCount = 0;
+        $autoSuspended = false;
+        DB::transaction(function () use (
+            $attempt,
+            $event,
+            $metadata,
+            $request,
+            $violationEvents,
+            $settings,
+            &$violationCount,
+            &$autoSuspended
+        ) {
+            DB::table('exam_security_events')->insert([
+                'attend_exam_id' => $attempt->id,
+                'user_id' => auth()->id(),
+                'event' => $event,
+                'metadata' => $metadata ?: null,
+                'ip_address' => $request->ip(),
+                'user_agent' => substr((string) $request->userAgent(), 0, 1000),
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+
+            if (!in_array($event, $violationEvents, true)) {
+                return;
+            }
+
+            $violationCount = DB::table('exam_security_events')
+                ->where('user_id', auth()->id())
+                ->whereIn('event', $violationEvents)
+                ->count();
+            $threshold = max(2, (int) ($settings->exam_security_violation_limit ?? 5));
+            if ($violationCount < $threshold) {
+                return;
+            }
+
+            $reason = 'Automated exam security suspension: This account was suspended after '
+                . $violationCount
+                . ' exam-security violations. Reason: attempted use of unfair means such as screen capture, screen recording, copying, printing, or inspection.';
+            $autoSuspended = DB::table('users')
+                ->where('id', auth()->id())
+                ->where('status', Status::USER_ACTIVE)
+                ->update([
+                    'status' => Status::USER_BAN,
+                    'ban_reason' => $reason,
+                    'updated_at' => now(),
+                ]) > 0;
+        });
 
         if (in_array($event, ['visibility_hidden', 'window_blur', 'fullscreen_exit', 'devtools_suspected'], true)) {
             $attempt->is_paused = Status::YES;
             $attempt->save();
         }
 
-        return response()->json(['success' => true]);
+        return response()->json([
+            'success' => true,
+            'enforced' => true,
+            'violation_count' => $violationCount,
+            'suspended' => $autoSuspended,
+        ]);
     }
 
     public function submit(Request $request, $id) {

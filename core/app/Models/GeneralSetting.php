@@ -13,6 +13,8 @@ class GeneralSetting extends Model
         'socialite_credentials' => 'object',
         'firebase_config' => 'object',
         'config_progress'=>'object',
+        'exam_security_enabled' => 'boolean',
+        'exam_security_violation_limit' => 'integer',
     ];
 
     protected $hidden = ['email_template','mail_config','sms_config','system_info'];

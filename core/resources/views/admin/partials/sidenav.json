@@ -78,6 +78,18 @@
                 "title": "Declared Result",
                 "route_name": "admin.exams.result.declare",
                 "menu_active": "admin.exams.result.declare"
+            },
+            {
+                "keyword": [
+                    "Exam Security",
+                    "Security Monitor",
+                    "Violation Logs",
+                    "Screen capture protection",
+                    "Exam integrity"
+                ],
+                "title": "Security Monitor",
+                "route_name": "admin.exams.security.index",
+                "menu_active": "admin.exams.security.*"
             }
         ]
     },

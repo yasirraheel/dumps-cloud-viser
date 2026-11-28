@@ -34,11 +34,13 @@
                     </div>
                 </header>
 
-                <div class="exam-security-watermark" id="examSecurityWatermark" aria-hidden="true">
-                    <span>{{ $securityWatermarkLabel }}</span>
-                    <span>Exam session #{{ $attendExam->id }}</span>
-                    <span data-security-watermark-time></span>
-                </div>
+                @if ($examSecurityEnabled)
+                    <div class="exam-security-watermark" id="examSecurityWatermark" aria-hidden="true">
+                        <span>{{ $securityWatermarkLabel }}</span>
+                        <span>Exam session #{{ $attendExam->id }}</span>
+                        <span data-security-watermark-time></span>
+                    </div>
+                @endif
 
                 <div class="exam-flow-layout">
                     <main class="exam-flow-main">
@@ -191,7 +193,7 @@
                         hasEnteredFullscreen=true;
                         return;
                     }
-                    if(hasEnteredFullscreen&&!submitting&&!submittedByTimer){
+                    if(examSecurityEnabled&&hasEnteredFullscreen&&!submitting&&!submittedByTimer){
                         setPaused(true,false);
                         showSecurityOverlay('fullscreen_exit');
                         persistSession();
@@ -229,6 +231,7 @@
                 const csrfToken=document.querySelector('meta[name="csrf-token"]')?.content||'{{ csrf_token() }}';
                 const examAccessToken=@json($examAccessToken);
                 const examAccessExpires=@json($examAccessTokenExpires);
+                const examSecurityEnabled=Boolean(@json($examSecurityEnabled));
                 const examAccessHeaders=(extra={})=>({'X-Exam-Access':examAccessToken,'X-Exam-Access-Expires':String(examAccessExpires),...extra});
                 const inlineFeedback=@json((bool) ($settings['inline_feedback'] ?? false));
                 let current=Number(@json($sessionIndex))||0;
@@ -243,13 +246,14 @@
                 let sessionSaveQueue=Promise.resolve(),dragConfirmationPending=false,hasEnteredFullscreen=false,securityOverlayOpen=false,securityNoticeTimer=null;
                 const securityEventCooldowns=new Map();
                 function logSecurityEvent(event,metadata={}){
+                    if(!examSecurityEnabled)return;
                     const now=Date.now(),last=securityEventCooldowns.get(event)||0;
                     if(now-last<1500||!securityEventUrl)return;
                     securityEventCooldowns.set(event,now);
                     fetch(securityEventUrl,{method:'POST',keepalive:true,headers:examAccessHeaders({'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':csrfToken,'X-Requested-With':'XMLHttpRequest'}),body:JSON.stringify({event,metadata})}).catch(()=>null);
                 }
                 function showSecurityOverlay(event,metadata={},temporary=false){
-                    if(!securityOverlay)return;
+                    if(!examSecurityEnabled||!securityOverlay)return;
                     if(securityNoticeTimer)window.clearTimeout(securityNoticeTimer);
                     securityOverlayOpen=true;
                     if(securityOverlayText)securityOverlayText.textContent=temporary
@@ -830,6 +834,7 @@
                     }
                 });
                 function isExamContentTarget(target){
+                    if(!examSecurityEnabled)return false;
                     const pageTarget=!target||target===document||target===document.body;
                     return Boolean(examSurface&&(pageTarget||examSurface.contains(target))&&!securityOverlay?.contains(target));
                 }
