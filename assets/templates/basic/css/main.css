@@ -9052,7 +9052,7 @@ html:has(.exam-take-page) {
   align-items:center;
   background:hsl(var(--base));
   border-radius:6px;
-  color:hsl(var(--white));
+  color:hsl(var(--black));
   display:inline-flex;
   font-weight:700;
   height:30px;
