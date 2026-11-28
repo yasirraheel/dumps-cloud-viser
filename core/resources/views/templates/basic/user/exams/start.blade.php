@@ -317,7 +317,8 @@
                 function refresh(keepView=false){
                     nav.forEach((button,index)=>{const incorrect=incorrectIndexes.has(index);button.classList.toggle('is-current',index===current);button.classList.toggle('is-answered',answeredIndexes.has(index)&&!incorrect);button.classList.toggle('is-review',reviewed.has(index));button.classList.toggle('is-incorrect',incorrect);button.disabled=loading});
                     const isLastQuestion=current>=totalQuestions-1;
-                    prev.disabled=loading||current===0;next.disabled=loading;const readyForNext=requiredActionComplete();next.textContent=readyForNext?'@lang('Next')':'@lang('Skip')';next.setAttribute('aria-label',readyForNext?'@lang('Next')':'@lang('Skip')');next.classList.toggle('btn--dark',!readyForNext);next.classList.toggle('btn--base',readyForNext);next.classList.toggle('d-none',isLastQuestion);next.hidden=isLastQuestion;submit.classList.toggle('d-none',!isLastQuestion);submit.hidden=!isLastQuestion;
+                    const showNext=!isLastQuestion;
+                    prev.disabled=loading||current===0;next.disabled=loading;const readyForNext=requiredActionComplete();next.textContent=readyForNext?'@lang('Next')':'@lang('Skip')';next.setAttribute('aria-label',readyForNext?'@lang('Next')':'@lang('Skip')');next.classList.toggle('btn--dark',!readyForNext);next.classList.toggle('btn--base',readyForNext);next.classList.toggle('d-none',!showNext);next.hidden=!showNext;next.style.display=showNext?'':'none';submit.classList.toggle('d-none',showNext);submit.hidden=showNext;submit.style.display=showNext?'none':'';
                     review.disabled=loading;review.classList.toggle('btn--warning',reviewed.has(current));
                     review.innerHTML=reviewed.has(current)?'<i class="las la-flag"></i><span>@lang('Remove Review')</span>':'<i class="las la-flag"></i><span>@lang('Mark for Review')</span>';
                     if(showAnswer){showAnswer.disabled=loading||revealed.has(current);showAnswer.innerHTML=revealed.has(current)?'<i class="las la-check-circle" aria-hidden="true"></i><span>@lang('Answer revealed')</span>':'<i class="las la-lightbulb" aria-hidden="true"></i><span>@lang('Show Answer')</span>'}
@@ -721,7 +722,7 @@
                     }catch(error){notify('error','@lang('Unable to load this question. Please try again.')')}
                     finally{loading=false;container.classList.remove('is-loading');refresh();hideActionLoader()}
                 }
-                next.addEventListener('click',()=>{const canContinue=requiredActionComplete();loadQuestion(current+1,canContinue,canContinue?'@lang('Loading next question')':'@lang('Skipping question')')});
+                next.addEventListener('click',()=>{if(current>=totalQuestions-1){refresh();return}const canContinue=requiredActionComplete();loadQuestion(current+1,canContinue,canContinue?'@lang('Loading next question')':'@lang('Skipping question')')});
                 prev.addEventListener('click',()=>loadQuestion(current-1,false,'@lang('Loading previous question')'));
                 mobileQuestionNavToggle?.addEventListener('click',()=>{
                     const isOpen=mobileQuestionNavDrawer?.hidden??true;

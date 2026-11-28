@@ -30,7 +30,7 @@
                         <div class="card-header">
                             <span class="text--base fw-semibold">{{ __($exam->category?->name ?? 'Exam') }}</span>
                             <h4 class="card-title mt-1">{{ __($exam->title) }}</h4>
-                            <p class="text--white mb-0 mt-1">{{ $questionCount }} @lang('active questions') · {{ getAmount($exam->pass_percentage) }}% @lang('pass mark')</p>
+                            <p class="text--white mb-0 mt-1">{{ $questionCount }} @lang('allowed questions')@if (($availableQuestionCount ?? $questionCount) > $questionCount) @lang('of') {{ $availableQuestionCount }} @lang('available')@endif · {{ getAmount($exam->pass_percentage) }}% @lang('pass mark')</p>
                         </div>
 
                         <form action="{{ route('user.exam.begin', $exam->slug) }}" method="POST" data-exam-settings>
@@ -81,7 +81,7 @@
                                             </div>
                                         </div>
                                     </div>
-                                    <small class="text--white">@lang('Saved with this attempt for resume.')</small>
+                                    <small class="text--white">@lang('Fixed timers are distributed across the full bank and scaled to the questions allowed by your plan.')</small>
                                 </div>
 
                                 <div class="mb-3">

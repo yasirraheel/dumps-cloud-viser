@@ -20,6 +20,7 @@ class ExamController extends Controller {
         $exam = Exam::active()->running()->where('slug', $slug)->firstOrFail();
         $allQuestionIds = $this->orderedQuestionIds($exam);
         abort_if(count($allQuestionIds) < 1, 404, 'This exam has no active questions.');
+        $availableQuestionCount = count($allQuestionIds);
 
         $user = auth()->user();
 
@@ -55,7 +56,7 @@ class ExamController extends Controller {
         if (!$simulationAllowed && ($examSettings['mode'] ?? 'study') === 'simulation') {
             $examSettings['mode'] = 'study';
         }
-        return view('Template::user.exams.configure', compact('pageTitle', 'exam', 'questionCount', 'examSettings', 'simulationAllowed'));
+        return view('Template::user.exams.configure', compact('pageTitle', 'exam', 'questionCount', 'availableQuestionCount', 'examSettings', 'simulationAllowed'));
     }
 
     public function resume($id) {
@@ -102,7 +103,7 @@ class ExamController extends Controller {
         $showAnswers = (bool) ($settings['include_show_answer'] ?? true)
             && ($user->plan?->hasFeature('answer_explanations') ?? false);
         $showLiveScore = (bool) ($settings['show_score_live'] ?? true);
-        $timerLabel = $this->timerLabel($settings, $questionCount);
+        $timerLabel = $this->timerLabel($settings, $questionCount, $availableQuestionCount);
         $liveScore = $this->liveScoreForAttempt($exam, $attendExam, $allQuestionIds, $flowQuestionIds, true);
         $sessionIncorrect = [];
         foreach ($flowQuestionIds as $flowIndex => $questionId) {
@@ -174,6 +175,7 @@ class ExamController extends Controller {
         $exam = Exam::active()->running()->where('slug', $slug)->firstOrFail();
         $allQuestionIds = $this->orderedQuestionIds($exam);
         abort_if(!$allQuestionIds, 404, 'This exam has no active questions.');
+        $availableQuestionCount = count($allQuestionIds);
 
         $user = auth()->user();
         if (!$user->plan_id || $user->expired_date < now()->format('Y-m-d')) {
@@ -248,7 +250,7 @@ class ExamController extends Controller {
                 : $optionIds;
         }
 
-        $seconds = $this->timerSeconds($settings['timer'], count($orderedIds));
+        $seconds = $this->timerSecondsForAttempt($settings['timer'], count($orderedIds), $availableQuestionCount);
         $attemptId = DB::transaction(function () use ($user, $exam, $settings, $orderedIds, $optionOrders, $seconds) {
             $lockedUser = $user->newQuery()->lockForUpdate()->findOrFail($user->id);
             abort_if($lockedUser->exam_limit <= 0, 422, 'You do not have enough credit to perform this action.');
@@ -727,6 +729,7 @@ class ExamController extends Controller {
 
         $exam = Exam::active()->running()->whereKey($attendExam->exam_id)->firstOrFail();
 
+        $availableQuestionCount = count($this->orderedQuestionIds($exam));
         $allQuestionIds = $this->attemptQuestionIds($exam, $attendExam);
         $user = auth()->user();
         if (!$user->plan?->allowsExam($exam)) {
@@ -813,7 +816,7 @@ class ExamController extends Controller {
         $attendExam->is_paused = false;
         $attendExam->remaining_seconds = ($settings['timer'] ?? null) === 'legacy_duration'
             ? (int) $exam->duration * 60
-            : $this->timerSeconds((string) ($settings['timer'] ?? 'not_timed'), count($targetIds));
+            : $this->timerSecondsForAttempt((string) ($settings['timer'] ?? 'not_timed'), count($targetIds), $availableQuestionCount);
         $attendExam->current_question = 0;
         $attendExam->retake_question_ids = $targetIds;
         $attendExam->session_answers = [];
@@ -849,7 +852,11 @@ class ExamController extends Controller {
         $answersByAttempt = ExamAnswer::whereIn('exam_attend_id', $attemptIds)->get()->groupBy('exam_attend_id');
 
         foreach ($examLogs as $examLog) {
-            $questions = $questionsByExam->get($examLog->exam_id, collect())->values();
+            $questions = $this->questionsForAttempt(
+                $examLog->exam,
+                $examLog,
+                $questionsByExam->get($examLog->exam_id, collect())
+            );
             $answers = $answersByAttempt->get($examLog->id, collect());
             $scoreData = $this->scoreStoredAttempt(
                 $questions,
@@ -926,7 +933,11 @@ class ExamController extends Controller {
             ->groupBy('exam_attend_id');
 
         $results = $completedAttempts->map(function ($attempt) use ($questionsByExam, $answersByAttempt) {
-            $questions = $questionsByExam->get($attempt->exam_id, collect())->values();
+            $questions = $this->questionsForAttempt(
+                $attempt->exam,
+                $attempt,
+                $questionsByExam->get($attempt->exam_id, collect())
+            );
             $answers = $answersByAttempt->get($attempt->id, collect());
 
             if ($questions->isEmpty()) {
@@ -990,9 +1001,15 @@ class ExamController extends Controller {
             ->all();
     }
 
-    private function attemptQuestionIds(Exam $exam, AttendExam $attempt): array
+    private function attemptQuestionIds(Exam $exam, AttendExam $attempt, bool $enforceCurrentPlan = true): array
     {
         $questionIds = $this->orderedQuestionIds($exam);
+        if ($enforceCurrentPlan) {
+            $plan = auth()->user()?->plan;
+            if ($plan?->allowsExam($exam)) {
+                $questionIds = $this->questionIdsForPlan($exam, $questionIds, $plan);
+            }
+        }
         $validIds = array_fill_keys($questionIds, true);
         $savedOrder = array_values(array_unique(array_filter(
             array_map('strval', (array) ($attempt->question_order ?? [])),
@@ -1000,6 +1017,23 @@ class ExamController extends Controller {
         )));
 
         return $savedOrder ?: $questionIds;
+    }
+
+    private function questionsForAttempt(Exam $exam, AttendExam $attempt, Collection $questions): Collection
+    {
+        $questionsById = $questions->keyBy(fn ($question) => (string) $question->id);
+        $questionIds = $this->attemptQuestionIds($exam, $attempt, false);
+        if (empty($attempt->question_order)) {
+            $plan = auth()->user()?->plan;
+            if ($plan?->allowsExam($exam)) {
+                $questionIds = $this->questionIdsForPlan($exam, $questionIds, $plan);
+            }
+        }
+
+        return collect($questionIds)
+            ->map(fn ($questionId) => $questionsById->get((string) $questionId))
+            ->filter()
+            ->values();
     }
 
     private function questionIdsForPlan(Exam $exam, array $questionIds, $plan): array
@@ -1081,16 +1115,33 @@ class ExamController extends Controller {
         };
     }
 
-    private function timerLabel(array $settings, int $questionCount): string
+    private function timerSecondsForAttempt(string $timer, int $allowedQuestionCount, int $availableQuestionCount): ?int
+    {
+        $seconds = $this->timerSeconds($timer, $allowedQuestionCount);
+        if ($seconds === null || $availableQuestionCount < 1 || $allowedQuestionCount >= $availableQuestionCount) {
+            return $seconds;
+        }
+
+        if (!in_array($timer, ['ccna_120', '90_mins', '60_mins'], true)) {
+            return $seconds;
+        }
+
+        return max(1, (int) round($seconds * ($allowedQuestionCount / $availableQuestionCount)));
+    }
+
+    private function timerLabel(array $settings, int $questionCount, ?int $availableQuestionCount = null): string
     {
         if (($settings['timer'] ?? 'not_timed') === 'legacy_duration') {
             return 'Timed session';
         }
-        $seconds = $this->timerSeconds((string) ($settings['timer'] ?? 'not_timed'), $questionCount);
+        $timer = (string) ($settings['timer'] ?? 'not_timed');
+        $seconds = $availableQuestionCount === null
+            ? $this->timerSeconds($timer, $questionCount)
+            : $this->timerSecondsForAttempt($timer, $questionCount, $availableQuestionCount);
         if ($seconds === null) {
             return 'Untimed';
         }
-        if (in_array($settings['timer'], ['30s_per_q', '60s_per_q', '90s_per_q'], true)) {
+        if (in_array($timer, ['30s_per_q', '60s_per_q', '90s_per_q'], true)) {
             return (int) ($seconds / max(1, $questionCount)) . ' sec / question';
         }
         return (int) ($seconds / 60) . ' minutes';
@@ -1338,11 +1389,12 @@ class ExamController extends Controller {
         $attemptSettings = $attendExam->exam_settings
             ? $this->settingsForAttempt($attendExam)
             : array_merge($this->defaultExamSettings(), ['timer' => 'legacy_duration']);
+        $availableQuestionCount = count($this->orderedQuestionIds($exam));
         $allQuestionIds = $this->attemptQuestionIds($exam, $attendExam);
         $questionIds = $this->flowQuestionIds($allQuestionIds, $attendExam);
         $attemptTimerLabel = ($attemptSettings['timer'] ?? null) === 'legacy_duration'
             ? (int) $exam->duration . ' minutes'
-            : $this->timerLabel($attemptSettings, count($questionIds));
+            : $this->timerLabel($attemptSettings, count($questionIds), $availableQuestionCount);
         $questionsById = $this->questionQuery($exam)
             ->active()
             ->orderBy('sort_order')

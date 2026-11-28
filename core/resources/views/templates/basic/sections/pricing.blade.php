@@ -24,7 +24,7 @@
             <span class="pricing-billing-priod__label">@lang('Annual')</span>
         </div>
 
-        <div class="row gy-4">
+        <div class="row gy-4 justify-content-center">
             @foreach ($plans as $plan)
                 @php
                     $planCategories = $plan->accessCategories();
@@ -33,13 +33,17 @@
                         && (int) auth()->user()->plan_id === (int) $plan->id
                         && (!auth()->user()->expired_date || auth()->user()->expired_date >= now()->format('Y-m-d'));
                     $categoryNames = $planCategories->pluck('name')->map(fn ($name) => __($name))->implode(', ');
-                    $bankNames = $planExams->map(function ($exam) use ($plan) {
+                    $bankDetails = $planExams->map(function ($exam) use ($plan) {
                         $availableQuestions = $exam->activeQuestionCount();
                         $allowedQuestions = $plan->questionLimitForExam($exam) ?? $availableQuestions;
-                        return __($exam->title) . ' (' . $allowedQuestions . '/' . $availableQuestions . ')';
-                    })->implode(', ');
+                        return [
+                            'title' => __($exam->title),
+                            'allowed' => $allowedQuestions,
+                            'available' => $availableQuestions,
+                        ];
+                    })->values();
                 @endphp
-                <div class="col-lg-4 col-sm-6 flex-grow-1">
+                <div class="col-lg-4 col-sm-6">
                     <div class="pricing-card wow fadeInDown @if ($isCurrentPlan) base-style @endif" data-wow-delay="0.2s">
                         @if ($isCurrentPlan)
                             <div class="pricing-card__base">@lang('Expire this after') {{ diffForHumans(auth()->user()->expired_date) }}</div>
@@ -74,8 +78,22 @@
                             <li class="pricing-list__item {{ $categoryNames ? '' : 'is-locked' }}">
                                 <p class="text"><span class="fw-semibold">@lang('Categories'):</span> {{ $categoryNames ?: __('Not included') }}</p>
                             </li>
-                            <li class="pricing-list__item {{ $bankNames ? '' : 'is-locked' }}">
-                                <p class="text"><span class="fw-semibold">@lang('Exam banks'):</span> {{ $bankNames ?: __('Not included') }}</p>
+                            <li class="pricing-list__item {{ $bankDetails->isNotEmpty() ? 'pricing-bank-item' : 'is-locked' }}">
+                                @if ($bankDetails->isNotEmpty())
+                                    <div class="pricing-bank-item__content">
+                                        <p class="text mb-0"><span class="fw-semibold">@lang('Exam banks')</span></p>
+                                        <ul class="pricing-bank-list">
+                                            @foreach ($bankDetails as $bank)
+                                                <li>
+                                                    <span>{{ $bank['title'] }}</span>
+                                                    <small>{{ $bank['allowed'] }}/{{ $bank['available'] }} @lang('questions')</small>
+                                                </li>
+                                            @endforeach
+                                        </ul>
+                                    </div>
+                                @else
+                                    <p class="text"><span class="fw-semibold">@lang('Exam banks'):</span> @lang('Not included')</p>
+                                @endif
                             </li>
                             <li class="pricing-list__item {{ $plan->allowsSimulation() ? '' : 'is-locked' }}">
                                 <p class="text">@lang('Simulation mode')</p>
