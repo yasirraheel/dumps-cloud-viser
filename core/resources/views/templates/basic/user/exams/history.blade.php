@@ -150,7 +150,10 @@
                                             </a>
                                         @else
                                             <a href="{{ route('pricing') }}#pricing-plans" class="btn btn--dark btn--xsm" data-bs-toggle="tooltip" data-bs-title="@lang('Upgrade for certificate')">
-                                                <i class="las la-lg la-lock"></i>
+                                                <span class="certificate-lock-icon" aria-hidden="true">
+                                                    <i class="las la-lg la-certificate certificate-lock-icon__certificate"></i>
+                                                    <i class="las la-lock certificate-lock-icon__lock"></i>
+                                                </span>
                                             </a>
                                         @endif
                                         @if ($examLog->exam)

@@ -8977,6 +8977,39 @@ td[colspan="100%"]::before {
     flex: 0 0 auto;
 }
 
+.certificate-lock-icon {
+    align-items: center;
+    display: inline-flex;
+    height: 1.25em;
+    justify-content: center;
+    position: relative;
+    width: 1.25em;
+}
+
+.certificate-lock-icon__certificate {
+    color: hsl(var(--base));
+    font-size: 1.3em;
+    opacity: 0.62;
+}
+
+.certificate-lock-icon__lock {
+    align-items: center;
+    background-color: hsl(var(--dark));
+    border: 1px solid hsl(var(--base) / 0.55);
+    border-radius: 50%;
+    bottom: -0.16em;
+    box-shadow: 0 0 0 2px hsl(var(--dark));
+    color: hsl(var(--white));
+    display: inline-flex;
+    font-size: 0.68em;
+    height: 1.3em;
+    justify-content: center;
+    line-height: 1;
+    position: absolute;
+    right: -0.18em;
+    width: 1.3em;
+}
+
 @media (max-width: 767px) {
     .exam-history-actions {
         min-width: 0;

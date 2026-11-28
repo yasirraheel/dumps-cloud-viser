@@ -179,7 +179,7 @@
                 const review=document.getElementById('markReview');
                 const showAnswer=document.getElementById('showAnswer');
                 const scoreBox=document.getElementById('liveScore');
-                const totalQuestions=Number(@json($questionCount));
+                const totalQuestions=Math.min(Number(@json($questionCount)),nav.length||Number(@json($questionCount)));
                 const questionUrl='{{ route('user.exam.question', ['id' => $attendExam->id, 'index' => '__INDEX__'], false) }}';
                 const answerUrl='{{ route('user.exam.answer.reveal', ['id' => $attendExam->id, 'index' => '__INDEX__'], false) }}';
                 const dragConfirmUrl='{{ route('user.exam.drag-drop.confirm', ['id' => $attendExam->id, 'index' => '__INDEX__'], false) }}';
