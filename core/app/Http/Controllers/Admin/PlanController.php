@@ -24,9 +24,17 @@ class PlanController extends Controller {
             $plan      = null;
         }
         $categories = Category::active()
-            ->with(['exams' => fn ($query) => $query->active()->orderBy('sort_order')->orderBy('id')])
+            ->with(['exams' => fn ($query) => $query->active()
+                ->withCount(['questions as active_questions_count' => fn ($questionQuery) => $questionQuery->active()])
+                ->orderBy('sort_order')->orderBy('id')])
             ->orderBy('name')
             ->get();
+
+        $categories->each(function ($category) {
+            $category->exams->each(function ($exam) {
+                $exam->available_questions = $exam->activeQuestionCount();
+            });
+        });
 
         return view('admin.plan.add', compact('pageTitle', 'plan', 'categories'));
     }
@@ -43,6 +51,8 @@ class PlanController extends Controller {
             'allowed_categories.*' => 'integer|exists:categories,id',
             'allowed_exams' => 'nullable|array',
             'allowed_exams.*' => 'integer|exists:exams,id',
+            'exam_question_limits' => 'nullable|array',
+            'exam_question_limits.*' => 'nullable|integer|min:1',
         ]);
 
         if ($id) {
@@ -54,13 +64,24 @@ class PlanController extends Controller {
         }
 
         $allowedCategories = array_values(array_unique(array_map('intval', (array) $request->input('allowed_categories', []))));
-        $allowedExams = Exam::query()
+        $allowedExamRows = Exam::query()
+            ->active()
             ->whereIn('id', array_map('intval', (array) $request->input('allowed_exams', [])))
             ->whereIn('category_id', $allowedCategories)
-            ->pluck('id')
-            ->map(fn ($examId) => (int) $examId)
-            ->values()
-            ->all();
+            ->get();
+        $allowedExams = [];
+        $examQuestionLimits = [];
+        $requestedLimits = (array) $request->input('exam_question_limits', []);
+        foreach ($allowedExamRows as $exam) {
+            $availableQuestions = $exam->activeQuestionCount();
+            if ($availableQuestions < 1) {
+                continue;
+            }
+
+            $requestedLimit = $requestedLimits[(string) $exam->id] ?? $availableQuestions;
+            $allowedExams[] = (int) $exam->id;
+            $examQuestionLimits[(string) $exam->id] = min($availableQuestions, max(1, (int) $requestedLimit));
+        }
         $featureFlags = [
             'answer_explanations' => $request->boolean('feature_answer_explanations'),
             'progress_tracking' => $request->boolean('feature_progress_tracking'),
@@ -76,6 +97,7 @@ class PlanController extends Controller {
         $plan->short_description = $request->short_description;
         $plan->allowed_categories = $allowedCategories;
         $plan->allowed_exams = $allowedExams;
+        $plan->exam_question_limits = $examQuestionLimits;
         $plan->feature_flags = $featureFlags;
         $plan->simulation_mode = $request->boolean('simulation_mode');
         $plan->is_free = $isFree;

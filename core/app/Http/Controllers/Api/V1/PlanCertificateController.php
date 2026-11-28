@@ -29,6 +29,7 @@ class PlanCertificateController extends Controller
             'yearly_exams' => (int) ($plan->yearly_exam ?? 0),
             'allowed_categories' => $plan->accessCategoryIds(),
             'allowed_exams' => $plan->accessExamIds(),
+            'exam_question_limits' => $plan->examQuestionLimits(),
             'simulation_mode' => $plan->allowsSimulation(),
             'features' => (array) ($plan->feature_flags ?? []),
             'is_popular' => (int) $plan->id === (int) $maxId,

@@ -33,7 +33,11 @@
                         && (int) auth()->user()->plan_id === (int) $plan->id
                         && (!auth()->user()->expired_date || auth()->user()->expired_date >= now()->format('Y-m-d'));
                     $categoryNames = $planCategories->pluck('name')->map(fn ($name) => __($name))->implode(', ');
-                    $bankNames = $planExams->pluck('title')->map(fn ($title) => __($title))->implode(', ');
+                    $bankNames = $planExams->map(function ($exam) use ($plan) {
+                        $availableQuestions = $exam->activeQuestionCount();
+                        $allowedQuestions = $plan->questionLimitForExam($exam) ?? $availableQuestions;
+                        return __($exam->title) . ' (' . $allowedQuestions . '/' . $availableQuestions . ')';
+                    })->implode(', ');
                 @endphp
                 <div class="col-lg-4 col-sm-6 flex-grow-1">
                     <div class="pricing-card wow fadeInDown @if ($isCurrentPlan) base-style @endif" data-wow-delay="0.2s">

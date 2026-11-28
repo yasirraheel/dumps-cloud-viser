@@ -19,8 +19,7 @@ class ExamController extends Controller {
     public function start($slug) {
         $exam = Exam::active()->running()->where('slug', $slug)->firstOrFail();
         $allQuestionIds = $this->orderedQuestionIds($exam);
-        $questionCount = count($allQuestionIds);
-        abort_if($questionCount < 1, 404, 'This exam has no active questions.');
+        abort_if(count($allQuestionIds) < 1, 404, 'This exam has no active questions.');
 
         $user = auth()->user();
 
@@ -44,6 +43,10 @@ class ExamController extends Controller {
             $notify[] = ['error', 'You do not have enough credit to perform this action.'];
             return back()->withNotify($notify);
         }
+
+        $allQuestionIds = $this->questionIdsForPlan($exam, $allQuestionIds, $user->plan);
+        $questionCount = count($allQuestionIds);
+        abort_if($questionCount < 1, 404, 'This exam has no questions available in your current plan.');
 
         // Every entry from All Exams is a fresh attempt and must pass through settings.
         $pageTitle = 'Exam Settings';
@@ -75,7 +78,7 @@ class ExamController extends Controller {
 
     private function renderAttempt(Exam $exam, AttendExam $attendExam, string $pageTitle) {
         $user = auth()->user();
-        $allQuestionIds = $this->orderedQuestionIds($exam);
+        $allQuestionIds = $this->attemptQuestionIds($exam, $attendExam);
         // Keep older in-progress attempts resumable with their original admin duration.
         if (!$attendExam->exam_settings) {
             $legacySettings = $this->defaultExamSettings();
@@ -187,6 +190,9 @@ class ExamController extends Controller {
             return back()->withNotify($notify);
         }
 
+        $allQuestionIds = $this->questionIdsForPlan($exam, $allQuestionIds, $user->plan);
+        abort_if(!$allQuestionIds, 404, 'This exam has no questions available in your current plan.');
+
         $validated = $request->validate([
             'mode' => 'required|in:study,simulation',
             'question_order' => 'required|in:original,random',
@@ -270,7 +276,7 @@ class ExamController extends Controller {
     public function revealAnswer(Request $request, $id, $index) {
         $attempt = $this->activeAttempt($id);
         $exam = Exam::active()->running()->whereKey($attempt->exam_id)->firstOrFail();
-        $allQuestionIds = $this->orderedQuestionIds($exam);
+        $allQuestionIds = $this->attemptQuestionIds($exam, $attempt);
         $flowIds = $this->flowQuestionIds($allQuestionIds, $attempt);
         $index = (int) $index;
         abort_if($index < 0 || $index >= count($flowIds), 404);
@@ -344,7 +350,7 @@ class ExamController extends Controller {
     public function confirmDragDrop(Request $request, $id, $index) {
         $attempt = $this->activeAttempt($id);
         $exam = Exam::active()->running()->whereKey($attempt->exam_id)->firstOrFail();
-        $allQuestionIds = $this->orderedQuestionIds($exam);
+        $allQuestionIds = $this->attemptQuestionIds($exam, $attempt);
         $flowIds = $this->flowQuestionIds($allQuestionIds, $attempt);
         $index = (int) $index;
         abort_if($index < 0 || $index >= count($flowIds), 404);
@@ -414,7 +420,7 @@ class ExamController extends Controller {
         $exam = Exam::active()->running()->whereKey($attendExam->exam_id)->firstOrFail();
         $index = (int) $index;
 
-        $allQuestionIds = $this->orderedQuestionIds($exam);
+        $allQuestionIds = $this->attemptQuestionIds($exam, $attendExam);
         $flowQuestionIds = $this->flowQuestionIds($allQuestionIds, $attendExam);
         abort_if($index < 0 || $index >= count($flowQuestionIds), 404);
 
@@ -453,7 +459,7 @@ class ExamController extends Controller {
         $attendExam = $this->activeAttempt($id);
         $exam = Exam::active()->running()->whereKey($attendExam->exam_id)->firstOrFail();
 
-        $allQuestionIds = $this->orderedQuestionIds($exam);
+        $allQuestionIds = $this->attemptQuestionIds($exam, $attendExam);
         $questionIds = $this->flowQuestionIds($allQuestionIds, $attendExam);
         $cleanAnswers = (array) ($attendExam->session_answers ?? []);
         $cleanAnswerData = (array) ($attendExam->session_answer_data ?? []);
@@ -531,7 +537,7 @@ class ExamController extends Controller {
         $submitExam = $this->activeAttempt($id);
         $exam = Exam::active()->running()->whereKey($submitExam->exam_id)->firstOrFail();
 
-        $allQuestionIds = $this->orderedQuestionIds($exam);
+        $allQuestionIds = $this->attemptQuestionIds($exam, $submitExam);
         $flowQuestionIds = $this->flowQuestionIds($allQuestionIds, $submitExam);
         $flowQuestionIdSet = array_fill_keys($flowQuestionIds, true);
         $questionsById = $this->questionQuery($exam)->active()->select([
@@ -674,7 +680,10 @@ class ExamController extends Controller {
             }
         }
 
-        DB::transaction(function () use ($submitExam, $replacementQuestionIds, $data, $exam, $allQuestionIds, $globalCommitted, $questionsById) {
+        $scoreQuestionIds = $submitExam->retake_question_ids ? $allQuestionIds : $flowQuestionIds;
+        $scoreCommitted = $submitExam->retake_question_ids ? $globalCommitted : $flowCommitted;
+
+        DB::transaction(function () use ($submitExam, $replacementQuestionIds, $data, $exam, $scoreQuestionIds, $scoreCommitted, $questionsById) {
             if ($replacementQuestionIds) {
                 $submitExam->examAnswer()->whereIn('question_id', $replacementQuestionIds)->delete();
             }
@@ -682,15 +691,15 @@ class ExamController extends Controller {
                 ExamAnswer::insert($data);
             }
 
-            $allQuestions = collect($allQuestionIds)
+            $scoreQuestions = collect($scoreQuestionIds)
                 ->map(fn ($questionId) => $questionsById->get((string) $questionId))
                 ->filter()
                 ->values();
             $answerRows = $submitExam->examAnswer()->get();
             $aggregateScore = $this->scoreStoredAttempt(
-                $allQuestions,
+                $scoreQuestions,
                 $answerRows,
-                $globalCommitted,
+                $scoreCommitted,
                 (float) $exam->pass_percentage
             );
             $this->persistCalculatedResult($submitExam, $answerRows, $aggregateScore);
@@ -717,7 +726,15 @@ class ExamController extends Controller {
 
         $exam = Exam::active()->running()->whereKey($attendExam->exam_id)->firstOrFail();
 
-        $allQuestionIds = $this->orderedQuestionIds($exam);
+        $allQuestionIds = $this->attemptQuestionIds($exam, $attendExam);
+        $user = auth()->user();
+        if (!$user->plan?->allowsExam($exam)) {
+            return to_route('pricing')->withNotify([['error', 'Your current plan does not include this exam bank.']]);
+        }
+        $allQuestionIds = $this->questionIdsForPlan($exam, $allQuestionIds, $user->plan);
+        if (!$allQuestionIds) {
+            return back()->withNotify([['error', 'This exam has no questions available in your current plan.']]);
+        }
         $questionsById = $this->questionQuery($exam)->active()->select([
             'id', 'exam_id', 'title', 'question_type', 'answer_data', 'result_option_id', 'sort_order'
         ])->with('options', function ($q) {
@@ -972,6 +989,32 @@ class ExamController extends Controller {
             ->all();
     }
 
+    private function attemptQuestionIds(Exam $exam, AttendExam $attempt): array
+    {
+        $questionIds = $this->orderedQuestionIds($exam);
+        $validIds = array_fill_keys($questionIds, true);
+        $savedOrder = array_values(array_unique(array_filter(
+            array_map('strval', (array) ($attempt->question_order ?? [])),
+            fn ($id) => isset($validIds[$id])
+        )));
+
+        return $savedOrder ?: $questionIds;
+    }
+
+    private function questionIdsForPlan(Exam $exam, array $questionIds, $plan): array
+    {
+        if (!$plan || !$plan->allowsExam($exam)) {
+            return [];
+        }
+
+        $limit = $plan->questionLimitForExam($exam);
+        if (!$limit || $limit >= count($questionIds)) {
+            return $questionIds;
+        }
+
+        return array_slice($questionIds, 0, $limit);
+    }
+
     private function questionQuery(Exam $exam)
     {
         if (!$exam->isAggregate()) {
@@ -994,10 +1037,6 @@ class ExamController extends Controller {
         if ($savedOrder) {
             $validIds = array_fill_keys($allQuestionIds, true);
             $savedOrder = array_values(array_unique(array_filter($savedOrder, fn ($id) => isset($validIds[$id]))));
-            if (($attendExam->exam_settings['mode'] ?? 'study') !== 'simulation') {
-                $savedSet = array_fill_keys($savedOrder, true);
-                $savedOrder = array_merge($savedOrder, array_values(array_filter($allQuestionIds, fn ($id) => !isset($savedSet[$id]))));
-            }
             $allQuestionIds = $savedOrder;
         }
 
@@ -1125,11 +1164,15 @@ class ExamController extends Controller {
             unset($answers[$currentQuestionId], $answerData[$currentQuestionId]);
         }
 
+        $flowQuestions = collect($flowQuestionIds)
+            ->map(fn ($questionId) => $questions->get((string) $questionId))
+            ->filter()
+            ->values();
         $score = ExamScoreCalculator::evaluate(
-            $questions->values(),
+            $flowQuestions,
             $answers,
             $answerData,
-            $globalCommitted,
+            $committedFlow,
             (float) $exam->pass_percentage
         );
         $sessionAnswers = (array) ($attempt->session_answers ?? []);
@@ -1294,10 +1337,12 @@ class ExamController extends Controller {
         $attemptSettings = $attendExam->exam_settings
             ? $this->settingsForAttempt($attendExam)
             : array_merge($this->defaultExamSettings(), ['timer' => 'legacy_duration']);
+        $allQuestionIds = $this->attemptQuestionIds($exam, $attendExam);
+        $questionIds = $this->flowQuestionIds($allQuestionIds, $attendExam);
         $attemptTimerLabel = ($attemptSettings['timer'] ?? null) === 'legacy_duration'
             ? (int) $exam->duration . ' minutes'
-            : $this->timerLabel($attemptSettings, $this->questionQuery($exam)->active()->count());
-        $questions = $this->questionQuery($exam)
+            : $this->timerLabel($attemptSettings, count($questionIds));
+        $questionsById = $this->questionQuery($exam)
             ->active()
             ->orderBy('sort_order')
             ->orderBy('id')
@@ -1305,7 +1350,12 @@ class ExamController extends Controller {
             ->with('options', function ($query) {
                 $query->active()->select(['id', 'question_id']);
             })
-            ->get();
+            ->get()
+            ->keyBy(fn ($question) => (string) $question->id);
+        $questions = collect($questionIds)
+            ->map(fn ($questionId) => $questionsById->get((string) $questionId))
+            ->filter()
+            ->values();
 
         $totalQuestions = $questions->count();
         $scoreData = null;
@@ -1334,7 +1384,7 @@ class ExamController extends Controller {
         abort_unless((int) $attendExam->is_submit === Status::YES, 404);
 
         $exam = Exam::where('id', $attendExam->exam_id)->with('category')->firstOrFail();
-        $allQuestionIds = $this->orderedQuestionIds($exam);
+        $allQuestionIds = $this->attemptQuestionIds($exam, $attendExam);
         $reviewQuestionIds = $this->flowQuestionIds($allQuestionIds, $attendExam);
         $questionCount = count($reviewQuestionIds);
         $index = (int) $index;
@@ -1342,8 +1392,8 @@ class ExamController extends Controller {
 
         $question = $this->loadQuestionForAttempt($exam, $reviewQuestionIds[$index], $attendExam);
         $answerRows = $attendExam->examAnswer()->where('question_id', $question->id)->get();
-        $canonicalIndex = array_search((string) $question->id, $allQuestionIds, true);
-        $committedAtIndex = $canonicalIndex !== false && in_array((int) $canonicalIndex, array_map('intval', (array) ($attendExam->committed_questions ?? [])), true);
+        $reviewIndex = array_search((string) $question->id, $reviewQuestionIds, true);
+        $committedAtIndex = $reviewIndex !== false && in_array((int) $reviewIndex, array_map('intval', (array) ($attendExam->committed_questions ?? [])), true);
         $scoreData = $this->scoreStoredAttempt(
             collect([$question]),
             $answerRows,

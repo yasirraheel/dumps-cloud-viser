@@ -3,6 +3,7 @@
     @php
         $selectedCategories = array_map('intval', (array) old('allowed_categories', $plan?->allowed_categories ?? []));
         $selectedExams = array_map('intval', (array) old('allowed_exams', $plan?->allowed_exams ?? []));
+        $selectedQuestionLimits = (array) old('exam_question_limits', $plan?->exam_question_limits ?? []);
     @endphp
     <div class="row justify-content-center">
         <div class="col-lg-10">
@@ -46,10 +47,22 @@
                                     <div class="plan-access-group">
                                         <p class="fw-semibold mb-2">{{ __($category->name) }}</p>
                                         @foreach ($category->exams as $exam)
-                                            <label class="plan-access-option">
-                                                <input type="checkbox" name="allowed_exams[]" value="{{ $exam->id }}" data-category-id="{{ $category->id }}" @checked(in_array((int) $exam->id, $selectedExams, true))>
-                                                <span>{{ __($exam->title) }}</span>
-                                            </label>
+                                            @php
+                                                $availableQuestions = (int) ($exam->available_questions ?? 0);
+                                                $questionLimit = (int) data_get($selectedQuestionLimits, $exam->id, $availableQuestions);
+                                                $examSelected = in_array((int) $exam->id, $selectedExams, true);
+                                            @endphp
+                                            <div class="plan-exam-access-row">
+                                                <label class="plan-access-option mb-0">
+                                                    <input class="plan-exam-toggle" type="checkbox" name="allowed_exams[]" value="{{ $exam->id }}" data-category-id="{{ $category->id }}" data-question-limit-toggle="{{ $exam->id }}" @checked($examSelected)>
+                                                    <span>{{ __($exam->title) }}</span>
+                                                </label>
+                                                <label class="plan-question-limit">
+                                                    <span>@lang('Questions')</span>
+                                                    <input type="number" name="exam_question_limits[{{ $exam->id }}]" value="{{ min($availableQuestions, max(1, $questionLimit)) }}" min="1" max="{{ $availableQuestions }}" data-question-limit-input="{{ $exam->id }}" @disabled(!$examSelected || $availableQuestions < 1)>
+                                                    <span>/ {{ $availableQuestions }}</span>
+                                                </label>
+                                            </div>
                                         @endforeach
                                     </div>
                                 @endforeach
@@ -238,6 +251,32 @@
             margin-bottom: 0;
         }
 
+        .plan-exam-access-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 8px 0;
+            border-bottom: 1px solid hsl(var(--border-color) / .45);
+        }
+
+        .plan-exam-access-row:last-child {
+            border-bottom: 0;
+        }
+
+        .plan-question-limit {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            white-space: nowrap;
+            font-size: .8rem;
+        }
+
+        .plan-question-limit input {
+            width: 76px;
+            padding: 5px 8px;
+        }
+
         .field-wrapper .image-upload-wrapper {
             height: 150px;
             position: relative;
@@ -255,4 +294,20 @@
             }
         }
     </style>
+@endpush
+
+@push('script')
+    <script>
+        (function() {
+            document.querySelectorAll('[data-question-limit-toggle]').forEach(function(toggle) {
+                var input = document.querySelector('[data-question-limit-input="' + toggle.value + '"]');
+                if (!input) return;
+                var sync = function() {
+                    input.disabled = !toggle.checked;
+                };
+                toggle.addEventListener('change', sync);
+                sync();
+            });
+        })();
+    </script>
 @endpush

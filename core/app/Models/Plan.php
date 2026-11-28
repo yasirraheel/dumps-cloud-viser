@@ -13,6 +13,7 @@ class Plan extends Model {
         'yearly_price'       => 'decimal:2',
         'allowed_categories' => 'array',
         'allowed_exams'      => 'array',
+        'exam_question_limits' => 'array',
         'feature_flags'      => 'array',
         'simulation_mode'    => 'boolean',
         'is_free'            => 'boolean',
@@ -36,6 +37,34 @@ class Plan extends Model {
             array_map('intval', (array) ($this->allowed_exams ?? [])),
             fn ($id) => $id > 0
         )));
+    }
+
+    public function examQuestionLimits(): array
+    {
+        $limits = [];
+        foreach ((array) ($this->exam_question_limits ?? []) as $examId => $limit) {
+            if ((int) $examId > 0 && is_numeric($limit) && (int) $limit > 0) {
+                $limits[(string) (int) $examId] = (int) $limit;
+            }
+        }
+
+        return $limits;
+    }
+
+    public function questionLimitForExam(?Exam $exam): ?int
+    {
+        if (!$exam || !$this->allowsExam($exam)) {
+            return null;
+        }
+
+        $available = $exam->activeQuestionCount();
+        $configured = $this->examQuestionLimits()[(string) $exam->id] ?? null;
+
+        if (!$configured) {
+            return $available;
+        }
+
+        return min($available, max(1, (int) $configured));
     }
 
     public function allowsCategory(?int $categoryId): bool
