@@ -7205,6 +7205,10 @@ input[type=number] {
     color: hsl(var(--white)/0.45);
 }
 
+.pricing-card.base-style .pricing-list__item.is-locked::before {
+    color: hsl(var(--white)/0.45);
+}
+
 .pricing-list__item.is-locked .text {
     color: hsl(var(--white)/0.55);
 }
