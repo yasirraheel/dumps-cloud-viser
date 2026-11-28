@@ -1,7 +1,7 @@
 @extends('Template::layouts.frontend')
 
 @section('content')
-    @php $optionLetters = range('A', 'Z'); $sessionAnswers = []; $sessionAnswerData = []; @endphp
+    @php $optionLetters = range('A', 'Z'); $sessionAnswers = []; $sessionAnswerData = []; $availableQuestionCount = $availableQuestionCount ?? $questionCount; @endphp
     <section class="exam-section exam-take-page exam-flow my-60">
         <div class="container">
             <form action="{{ route('user.exam.submit', $attendExam->id) }}" method="POST" id="examForm">
@@ -31,7 +31,7 @@
 
                         <div class="exam-flow-footer"><button type="button" class="btn btn--dark" id="previousQuestion"><i class="las la-arrow-left" aria-hidden="true"></i><span>@lang('Previous')</span></button><div class="exam-flow-center-actions">@if ($showAnswers)<button type="button" class="btn btn--sm btn-outline--info" id="showAnswer"><i class="las la-lightbulb" aria-hidden="true"></i><span>@lang('Show Answer')</span></button>@endif<button type="button" class="btn btn--sm btn-outline--warning" id="markReview"><i class="las la-flag"></i><span>@lang('Mark for Review')</span></button></div><div class="exam-flow-navigation"><button type="button" class="btn btn--base {{ $sessionIndex >= $questionCount - 1 ? 'd-none' : '' }}" id="nextQuestion" @if ($sessionIndex >= $questionCount - 1) hidden @endif>@lang('Next')</button><button type="submit" class="btn btn--base {{ $sessionIndex >= $questionCount - 1 ? '' : 'd-none' }}" id="submitExam" @if ($sessionIndex < $questionCount - 1) hidden @endif>@lang('Submit Exam')</button></div></div>
                     </main>
-                    <aside class="exam-flow-sidebar" id="examQuestionSidebar"><div class="exam-question-nav"><div class="exam-question-nav-title">@lang('Questions')</div><div class="exam-question-nav-grid">@for ($key = 0; $key < $questionCount; $key++)<button type="button" class="question-nav-item {{ $key === $sessionIndex ? 'is-current' : '' }} {{ in_array($key, $sessionIncorrect, true) ? 'is-incorrect' : '' }}" data-go-to="{{ $key }}">{{ $key + 1 }}</button>@endfor</div><div class="exam-nav-legend"><span class="legend-dot answered"></span> @lang('Answered') <span class="legend-dot review"></span> @lang('Review') <span class="legend-dot incorrect"></span> @lang('Incorrect')</div></div></aside>
+                    <aside class="exam-flow-sidebar" id="examQuestionSidebar"><div class="exam-question-nav"><div class="exam-question-nav-title">@lang('Questions')</div><div class="exam-question-nav-grid">@for ($key = 0; $key < $availableQuestionCount; $key++)@if ($key < $questionCount)<button type="button" class="question-nav-item {{ $key === $sessionIndex ? 'is-current' : '' }} {{ in_array($key, $sessionIncorrect, true) ? 'is-incorrect' : '' }}" data-go-to="{{ $key }}">{{ $key + 1 }}</button>@else<button type="button" class="question-nav-item is-locked" disabled aria-label="@lang('Question :number is locked', ['number' => $key + 1])"><i class="las la-lock" aria-hidden="true"></i><span>{{ $key + 1 }}</span></button>@endif @endfor</div><div class="exam-nav-legend"><span class="legend-dot answered"></span> @lang('Answered') <span class="legend-dot review"></span> @lang('Review') <span class="legend-dot incorrect"></span> @lang('Incorrect') <span class="legend-lock"><i class="las la-lock" aria-hidden="true"></i> @lang('Locked')</span></div></div></aside>
                 </div>
                 <div class="exam-mobile-toolbar" id="examMobileToolbar">
                     <div class="exam-mobile-toolbar-top">
@@ -172,7 +172,7 @@
                 }
                 arrangeMobileExam();
                 mobileLayoutQuery.addEventListener?.('change',arrangeMobileExam);
-                const nav=[...document.querySelectorAll('.question-nav-item')];
+                const nav=[...document.querySelectorAll('.question-nav-item:not(.is-locked)')];
                 const prev=document.getElementById('previousQuestion');
                 const next=document.getElementById('nextQuestion');
                 const submit=document.getElementById('submitExam');

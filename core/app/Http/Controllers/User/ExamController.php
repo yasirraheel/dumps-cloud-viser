@@ -78,6 +78,7 @@ class ExamController extends Controller {
 
     private function renderAttempt(Exam $exam, AttendExam $attendExam, string $pageTitle) {
         $user = auth()->user();
+        $availableQuestionCount = count($this->orderedQuestionIds($exam));
         $allQuestionIds = $this->attemptQuestionIds($exam, $attendExam);
         // Keep older in-progress attempts resumable with their original admin duration.
         if (!$attendExam->exam_settings) {
@@ -147,7 +148,7 @@ class ExamController extends Controller {
         return view('Template::user.exams.start', compact(
             'pageTitle', 'exam', 'attendExam', 'question', 'questionCount', 'savedAnswer', 'savedDragData',
             'sessionIndex', 'sessionRemaining', 'sessionPaused', 'sessionFlagged', 'sessionRevealed', 'sessionAttempted', 'answeredIndexes',
-            'sessionCommitted', 'sessionIncorrect', 'settings', 'showAnswers', 'showLiveScore', 'timerLabel', 'liveScore', 'dragFeedback'
+            'sessionCommitted', 'sessionIncorrect', 'settings', 'showAnswers', 'showLiveScore', 'timerLabel', 'liveScore', 'dragFeedback', 'availableQuestionCount'
         ));
     }
 
