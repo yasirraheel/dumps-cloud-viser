@@ -114,6 +114,7 @@
             "title": "text",
             "count_value": "text",
             "count_symbol": "text",
+            "variation": "text",
             "modal": true
         }
     },
