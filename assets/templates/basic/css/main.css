@@ -3617,6 +3617,138 @@ input[type=number] {
     }
 }
 
+/* =============================== network preloader =========================== */
+.preloader {
+    flex-direction: column;
+    gap: 10px;
+    overflow: hidden;
+    transition: opacity .35s ease, visibility .35s ease;
+}
+.network-loader {
+    height: 152px;
+    position: relative;
+    width: 152px;
+}
+.network-loader__orbit,
+.network-loader__connection,
+.network-loader__packet,
+.network-loader__node,
+.network-loader__core {
+    position: absolute;
+}
+.network-loader__orbit {
+    border: 1px solid hsl(var(--base) / .26);
+    border-radius: 50%;
+    inset: 14px;
+}
+.network-loader__orbit--outer {
+    animation: network-loader-orbit 7s linear infinite;
+    border-left-color: hsl(var(--base) / .78);
+    border-right-color: hsl(var(--secondary) / .55);
+    box-shadow: 0 0 26px hsl(var(--base) / .1);
+}
+.network-loader__orbit--inner {
+    animation: network-loader-orbit-reverse 4.5s linear infinite;
+    border-bottom-color: hsl(var(--secondary) / .65);
+    border-style: dashed;
+    inset: 31px;
+    opacity: .8;
+}
+.network-loader__connection {
+    background: linear-gradient(90deg, transparent, hsl(var(--base) / .44), transparent);
+    height: 1px;
+    left: 50%;
+    opacity: .75;
+    transform-origin: left center;
+    top: 50%;
+    width: 56px;
+}
+.network-loader__connection--one { transform: rotate(22deg); }
+.network-loader__connection--two { transform: rotate(142deg); }
+.network-loader__connection--three { transform: rotate(202deg); }
+.network-loader__connection--four { transform: rotate(322deg); }
+.network-loader__packet {
+    animation: network-loader-packet 2.2s ease-in-out infinite;
+    background: hsl(var(--secondary));
+    border-radius: 50%;
+    box-shadow: 0 0 10px hsl(var(--secondary) / .9);
+    height: 5px;
+    left: 50%;
+    top: 50%;
+    width: 5px;
+}
+.network-loader__packet--one { animation-delay: -.2s; transform: rotate(22deg) translateX(54px); }
+.network-loader__packet--two { animation-delay: -.92s; transform: rotate(142deg) translateX(54px); }
+.network-loader__packet--three { animation-delay: -1.58s; transform: rotate(262deg) translateX(54px); }
+.network-loader__node {
+    background: hsl(var(--base));
+    border: 3px solid hsl(var(--black) / .72);
+    border-radius: 50%;
+    box-shadow: 0 0 0 3px hsl(var(--base) / .2), 0 0 18px hsl(var(--base) / .7);
+    height: 13px;
+    width: 13px;
+}
+.network-loader__node--one { left: 105px; top: 47px; }
+.network-loader__node--two { left: 38px; top: 91px; }
+.network-loader__node--three { left: 92px; top: 111px; }
+.network-loader__node--four { left: 30px; top: 51px; }
+.network-loader__core {
+    align-items: center;
+    animation: network-loader-core 2.4s ease-in-out infinite;
+    background: radial-gradient(circle at 35% 30%, hsl(var(--base) / .3), hsl(var(--black) / .86) 68%);
+    border: 1px solid hsl(var(--base) / .72);
+    border-radius: 50%;
+    box-shadow: inset 0 0 18px hsl(var(--base) / .14), 0 0 30px hsl(var(--base) / .2);
+    color: hsl(var(--base));
+    display: inline-flex;
+    font-size: 30px;
+    height: 66px;
+    justify-content: center;
+    left: 43px;
+    top: 43px;
+    width: 66px;
+}
+.network-loader__core::after {
+    border: 1px solid hsl(var(--secondary) / .55);
+    border-radius: inherit;
+    content: "";
+    inset: -7px;
+    position: absolute;
+}
+.network-loader__label {
+    color: hsl(var(--white));
+    font-size: 1rem;
+    font-weight: 700;
+    letter-spacing: .01em;
+    text-align: center;
+}
+.network-loader__detail {
+    color: hsl(var(--white) / .58);
+    font-size: .82rem;
+    text-align: center;
+}
+@keyframes network-loader-orbit {
+    to { transform: rotate(360deg); }
+}
+@keyframes network-loader-orbit-reverse {
+    to { transform: rotate(-360deg); }
+}
+@keyframes network-loader-packet {
+    0%, 100% { opacity: .18; }
+    18% { opacity: 1; }
+    52% { opacity: .35; }
+}
+@keyframes network-loader-core {
+    0%, 100% { transform: scale(.96); }
+    50% { box-shadow: inset 0 0 24px hsl(var(--base) / .22), 0 0 42px hsl(var(--base) / .32); transform: scale(1.03); }
+}
+@media (prefers-reduced-motion: reduce) {
+    .network-loader__orbit,
+    .network-loader__packet,
+    .network-loader__core {
+        animation-duration: 3.5s;
+    }
+}
 /* ================================= preload Css End ===========================  */
 /* ============= Header Start Here ======================= */
 .navbar-brand {
