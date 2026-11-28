@@ -4,8 +4,11 @@
         @php
             $registerContent = getContent('register.content', true);
             $bannerContent = getContent('banner.content', true);
-            $bannerElement = getContent('banner.element', orderById: true);
             $testimonialElement = getContent('testimonial.element', orderById: true);
+            $ratingInitials = $testimonialElement->take(3)->map(function ($testimonial) {
+                $name = trim((string) ($testimonial?->data_values?->name ?? ''));
+                return $name !== '' ? mb_strtoupper(mb_substr($name, 0, 1)) : '?';
+            });
             $activeLearners = \App\Models\User::active()->count();
             $ratingText = $activeLearners > 0
                 ? __('Trusted by :count learners', ['count' => number_format($activeLearners)])
@@ -128,8 +131,8 @@
 
                         <div class="banner-content-rating mb-0">
                             <div class="banner-content-rating-thumb">
-                                @foreach ($bannerElement as $banner)
-                                    <img src="{{ frontendImage('banner', $banner?->data_values?->image ?? '', '60x60') }}" alt="img" />
+                                @foreach ($ratingInitials as $initial)
+                                    <span class="banner-content-rating-avatar" aria-hidden="true">{{ $initial }}</span>
                                 @endforeach
                             </div>
                             <div class="banner-content-rating-content">

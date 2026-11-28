@@ -29,7 +29,17 @@
                             @if (!$canAccessExam)
                                 <i class="las la-lock" aria-hidden="true"></i>
                             @endif
-                            <span>@lang('Start Now')</span>
+                            <span>
+                                @if ($canAccessExam)
+                                    @lang('Start Now')
+                                @else
+                                    @auth
+                                        @lang('Upgrade Plan')
+                                    @else
+                                        @lang('View Plans')
+                                    @endauth
+                                @endif
+                            </span>
                             @if ($canAccessExam)
                             <span class="icon ms-2">
                                 <svg class="transform transition-transform duration-300 group-hover:translate-x-[10px]"
