@@ -16,11 +16,15 @@
     </div>
     <div class="testimonial-slider wow fadeInDown" data-wow-delay="0.2s">
         @foreach ($testimonials as $testimonial)
+            @php
+                $testimonialName = trim((string) ($testimonial?->data_values?->name ?? ''));
+                $testimonialInitial = $testimonialName !== '' ? mb_strtoupper(mb_substr($testimonialName, 0, 1)) : '?';
+            @endphp
             <div class="testimonial">
                 <div class="testimonial-wrapper">
                     <div class="testimonial-author">
-                        <div class="testimonial-avatar">
-                            <img src="{{ frontendImage('testimonial', $testimonial?->data_values?->image ?? '', '100x100') }}" alt="img">
+                        <div class="testimonial-avatar" aria-hidden="true">
+                            {{ $testimonialInitial }}
                         </div>
                         <div class="testimonial-person">
                             <div class="testimonial-name">{{ __($testimonial?->data_values?->name ?? '') }}</div>
