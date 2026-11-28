@@ -46,9 +46,15 @@
                                             </button>
                                         </div>
                                         <div class="col-12 col-md-6">
-                                            <button type="button" class="btn w-100 text-start exam-mode-option {{ $examSettings['mode'] === 'simulation' ? 'is-active text--base' : '' }}" data-exam-mode="simulation" aria-pressed="{{ $examSettings['mode'] === 'simulation' ? 'true' : 'false' }}">
-                                                <i class="las la-stopwatch me-1" aria-hidden="true"></i><span>@lang('Simulation mode')</span>
-                                            </button>
+                                            @if ($simulationAllowed)
+                                                <button type="button" class="btn w-100 text-start exam-mode-option {{ $examSettings['mode'] === 'simulation' ? 'is-active text--base' : '' }}" data-exam-mode="simulation" aria-pressed="{{ $examSettings['mode'] === 'simulation' ? 'true' : 'false' }}">
+                                                    <i class="las la-stopwatch me-1" aria-hidden="true"></i><span>@lang('Simulation mode')</span>
+                                                </button>
+                                            @else
+                                                <a class="btn w-100 text-start exam-mode-option is-locked" href="{{ route('pricing') }}#pricing-plans">
+                                                    <i class="las la-lock me-1" aria-hidden="true"></i><span>@lang('Simulation mode')</span><small class="ms-1">@lang('Upgrade plan')</small>
+                                                </a>
+                                            @endif
                                         </div>
                                     </div>
                                     <small class="text--white" id="simulationNote" @if ($examSettings['mode'] !== 'simulation') hidden @endif>@lang('Simulation selects 70% to 80% random questions from this bank. The All Questions bank selects 70 to 80 questions from the complete pool and uses a 90 minute timer.')</small>

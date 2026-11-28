@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Constants\Status;
 use App\Http\Controllers\Controller;
+use App\Models\Plan;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -76,6 +77,14 @@ class AuthController extends Controller
         $user->ts = Status::NO;
         $user->tv = Status::YES;
         $user->profile_complete = Status::YES;
+
+        $freePlan = Plan::free();
+        if ($freePlan) {
+            $user->plan_id = $freePlan->id;
+            $user->exam_limit = $freePlan->monthly_exam;
+            $user->expired_date = now()->addYears(10)->format('Y-m-d');
+        }
+
         $user->save();
 
         $token = $user->createToken($request->input('device_name', 'android'))->plainTextToken;

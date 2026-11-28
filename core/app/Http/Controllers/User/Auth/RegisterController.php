@@ -6,6 +6,7 @@ use App\Constants\Status;
 use App\Http\Controllers\Controller;
 use App\Lib\Intended;
 use App\Models\AdminNotification;
+use App\Models\Plan;
 use App\Models\User;
 use App\Models\UserLogin;
 use Illuminate\Auth\Events\Registered;
@@ -110,6 +111,14 @@ class RegisterController extends Controller
         $user->sv = gs('sv') ? Status::NO : Status::YES;
         $user->ts = Status::DISABLE;
         $user->tv = Status::ENABLE;
+
+        $freePlan = Plan::free();
+        if ($freePlan) {
+            $user->plan_id = $freePlan->id;
+            $user->exam_limit = $freePlan->monthly_exam;
+            $user->expired_date = now()->addYears(10)->format('Y-m-d');
+        }
+
         $user->save();
 
         $adminNotification            = new AdminNotification();

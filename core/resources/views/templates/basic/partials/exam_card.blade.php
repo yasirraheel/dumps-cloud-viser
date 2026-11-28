@@ -1,4 +1,11 @@
 @forelse ($exams as $exam)
+    @php
+        $activePlan = auth()->user()?->plan;
+        $canAccessExam = $activePlan
+            && (!auth()->user()->expired_date || auth()->user()->expired_date >= now()->format('Y-m-d'))
+            && $activePlan->allowsExam($exam);
+        $examUrl = $canAccessExam ? route('user.exam.start', $exam->slug) : route('pricing') . '#pricing-plans';
+    @endphp
     <div class="col-md-6 col-xl-3">
         <div class="exam-view wow fadeInDown" data-wow-delay="0.3s">
             <div class="exam-view-thumb">
@@ -11,13 +18,14 @@
                     <span class="value">{{ getAmount($exam->pass_percentage) }}% @lang('Pass Mark')</span>
                 </div>
                 <h5 class="exam-view-title">
-                    <a href="{{ route('user.exam.start', $exam->slug) }}">{{ __($exam->title) }}</a>
+                    <a href="{{ $examUrl }}">{{ __($exam->title) }}</a>
                 </h5>
                 <div class="flex-between">
                     <span class="exam-view-category">{{ __($exam?->category?->name ?? '') }}</span>
                     @if ($exam->start_at < now())
-                        <a href="{{ route('user.exam.start', $exam->slug) }}" class="btn btn--base btn--md">
-                            @lang('Start Now')
+                        <a href="{{ $examUrl }}" class="btn {{ $canAccessExam ? 'btn--base' : 'btn--dark' }} btn--md">
+                            @if ($canAccessExam)
+                                @lang('Start Now')
                             <span class="icon ms-2">
                                 <svg class="transform transition-transform duration-300 group-hover:translate-x-[10px]"
                                      xmlns="http://www.w3.org/2000/svg" width="22" height="16" viewBox="0 0 26 16"
@@ -27,6 +35,9 @@
                                           fill="currentColor"></path>
                                 </svg>
                             </span>
+                            @else
+                                <i class="las la-lock" aria-hidden="true"></i><span>@lang('View plans')</span>
+                            @endif
                         </a>
                     @endif
                 </div>

@@ -1,5 +1,9 @@
 @extends('admin.layouts.app')
 @section('panel')
+    @php
+        $selectedCategories = array_map('intval', (array) old('allowed_categories', $plan?->allowed_categories ?? []));
+        $selectedExams = array_map('intval', (array) old('allowed_exams', $plan?->allowed_exams ?? []));
+    @endphp
     <div class="row justify-content-center">
         <div class="col-lg-10">
             <div class="card bg-card-style">
@@ -14,6 +18,88 @@
                             </div>
                             <div class="field-wrapper-view">
                                 <input class="form-control" type="text" name="name" value="{{ $plan?->name ?? '' }}" required>
+                            </div>
+                        </div>
+
+                        <div class="field-wrapper align-items-start">
+                            <div class="field-wrapper-label">
+                                <p class="title">@lang('Exam Categories')</p>
+                                <p class="note">@lang('Choose the categories included in this plan.')</p>
+                            </div>
+                            <div class="field-wrapper-view plan-access-grid">
+                                @foreach ($categories as $category)
+                                    <label class="plan-access-option">
+                                        <input type="checkbox" name="allowed_categories[]" value="{{ $category->id }}" @checked(in_array((int) $category->id, $selectedCategories, true))>
+                                        <span>{{ __($category->name) }}</span>
+                                    </label>
+                                @endforeach
+                            </div>
+                        </div>
+
+                        <div class="field-wrapper align-items-start">
+                            <div class="field-wrapper-label">
+                                <p class="title">@lang('Exam Banks')</p>
+                                <p class="note">@lang('Choose the banks users can open under this plan.')</p>
+                            </div>
+                            <div class="field-wrapper-view plan-access-grid">
+                                @foreach ($categories as $category)
+                                    <div class="plan-access-group">
+                                        <p class="fw-semibold mb-2">{{ __($category->name) }}</p>
+                                        @foreach ($category->exams as $exam)
+                                            <label class="plan-access-option">
+                                                <input type="checkbox" name="allowed_exams[]" value="{{ $exam->id }}" data-category-id="{{ $category->id }}" @checked(in_array((int) $exam->id, $selectedExams, true))>
+                                                <span>{{ __($exam->title) }}</span>
+                                            </label>
+                                        @endforeach
+                                    </div>
+                                @endforeach
+                            </div>
+                        </div>
+
+                        <div class="field-wrapper">
+                            <div class="field-wrapper-label">
+                                <p class="title">@lang('Simulation Mode')</p>
+                                <p class="note">@lang('Allow users to start timed random simulation attempts.')</p>
+                            </div>
+                            <div class="field-wrapper-view">
+                                <div class="form--switch base justify-content-start">
+                                    <input class="form-check-input" type="checkbox" name="simulation_mode" value="1" @checked(old('simulation_mode', $plan?->simulation_mode ?? false))>
+                                    <span class="form-check-label">@lang('Available in this plan')</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="field-wrapper align-items-start">
+                            <div class="field-wrapper-label">
+                                <p class="title">@lang('Plan Features')</p>
+                                <p class="note">@lang('Choose which extra features are included.')</p>
+                            </div>
+                            <div class="field-wrapper-view plan-access-grid">
+                                <label class="plan-access-option">
+                                    <input type="checkbox" name="feature_answer_explanations" value="1" @checked(old('feature_answer_explanations', $plan?->hasFeature('answer_explanations') ?? false))>
+                                    <span>@lang('Answer explanations')</span>
+                                </label>
+                                <label class="plan-access-option">
+                                    <input type="checkbox" name="feature_progress_tracking" value="1" @checked(old('feature_progress_tracking', $plan?->hasFeature('progress_tracking') ?? false))>
+                                    <span>@lang('Progress tracking')</span>
+                                </label>
+                                <label class="plan-access-option">
+                                    <input type="checkbox" name="feature_certificate" value="1" @checked(old('feature_certificate', $plan?->hasFeature('certificate') ?? false))>
+                                    <span>@lang('Completion certificate')</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="field-wrapper">
+                            <div class="field-wrapper-label">
+                                <p class="title">@lang('Free Plan')</p>
+                                <p class="note">@lang('Assign this plan automatically to new registrations.')</p>
+                            </div>
+                            <div class="field-wrapper-view">
+                                <div class="form--switch base justify-content-start">
+                                    <input class="form-check-input" type="checkbox" name="is_free" value="1" @checked(old('is_free', $plan?->is_free ?? false))>
+                                    <span class="form-check-label">@lang('Automatic free plan')</span>
+                                </div>
                             </div>
                         </div>
 
@@ -128,6 +214,28 @@
         .field-wrapper-view {
             flex: 1;
             max-width: 700px;
+        }
+
+        .plan-access-grid {
+            display: grid;
+            gap: 10px;
+        }
+
+        .plan-access-group {
+            padding: 14px;
+            border: 1px solid hsl(var(--border-color));
+            border-radius: 8px;
+        }
+
+        .plan-access-option {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+
+        .plan-access-option:last-child {
+            margin-bottom: 0;
         }
 
         .field-wrapper .image-upload-wrapper {

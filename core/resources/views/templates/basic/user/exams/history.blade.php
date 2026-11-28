@@ -144,9 +144,15 @@
                                         <i class="las la-lg la-desktop"></i>
                                     </a>
                                     @if ($examLog->status == Status::EXAM_COMPLETED)
-                                        <a href="{{ route('user.exam.certificate.download', $examLog->id) }}" class="btn btn--info btn--xsm" data-bs-toggle="tooltip" data-bs-title="@lang('Certificate')">
-                                            <i class="las la-lg la-certificate"></i>
-                                        </a>
+                                        @if (auth()->user()?->plan?->hasFeature('certificate'))
+                                            <a href="{{ route('user.exam.certificate.download', $examLog->id) }}" class="btn btn--info btn--xsm" data-bs-toggle="tooltip" data-bs-title="@lang('Certificate')">
+                                                <i class="las la-lg la-certificate"></i>
+                                            </a>
+                                        @else
+                                            <a href="{{ route('pricing') }}#pricing-plans" class="btn btn--dark btn--xsm" data-bs-toggle="tooltip" data-bs-title="@lang('Upgrade for certificate')">
+                                                <i class="las la-lg la-lock"></i>
+                                            </a>
+                                        @endif
                                         @if ($examLog->exam)
                                             <div class="retake-action d-inline-block">
                                                 <button type="button" class="btn btn--base btn--xsm retake-menu-trigger" aria-expanded="false" aria-controls="retake-menu-{{ $examLog->id }}">

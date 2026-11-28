@@ -41,7 +41,13 @@ class CatalogController extends Controller
         $exams = $query->orderBy('sort_order')
             ->orderBy('id')
             ->get()
-            ->map(fn ($exam) => $this->formatExam($exam, true))
+            ->map(function ($exam) use ($request) {
+                $data = $this->formatExam($exam, true);
+                $plan = $request->user()?->plan;
+                $data['plan_access'] = (bool) ($plan?->allowsExam($exam));
+                $data['simulation_available'] = (bool) ($plan?->allowsSimulation());
+                return $data;
+            })
             ->values()
             ->all();
 
@@ -57,7 +63,11 @@ class CatalogController extends Controller
         if (!$exam) {
             return $this->fail('Exam not found.', 404);
         }
-        return $this->ok($this->formatExam($exam, true));
+        $data = $this->formatExam($exam, true);
+        $plan = request()->user()?->plan;
+        $data['plan_access'] = (bool) ($plan?->allowsExam($exam));
+        $data['simulation_available'] = (bool) ($plan?->allowsSimulation());
+        return $this->ok($data);
     }
 
     public function bookExam(Request $request, $examId)
@@ -70,6 +80,9 @@ class CatalogController extends Controller
         $user = $request->user();
         if (!$user->plan_id || !$user->expired_date || $user->expired_date < now()->format('Y-m-d')) {
             return $this->fail('An active subscription plan is required to access exams.', 422);
+        }
+        if (!$user->plan?->allowsExam($exam)) {
+            return $this->fail('This exam bank is not included in your current plan.', 422);
         }
         if ((int) $user->exam_limit <= 0) {
             return $this->fail('You do not have enough exam credits remaining.', 422);

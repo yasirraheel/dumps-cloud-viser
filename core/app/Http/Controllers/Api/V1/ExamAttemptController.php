@@ -36,6 +36,9 @@ class ExamAttemptController extends Controller
         if (!$user->plan_id || !$user->expired_date || $user->expired_date < now()->format('Y-m-d')) {
             return $this->fail('Your active subscription is required to start this exam.', 422);
         }
+        if (!$user->plan?->allowsExam($exam)) {
+            return $this->fail('This exam bank is not included in your current plan.', 422);
+        }
         if ((int) $user->exam_limit <= 0) {
             return $this->fail('You do not have enough credit to perform this action.', 422);
         }
@@ -64,6 +67,10 @@ class ExamAttemptController extends Controller
         ];
 
         if ($settings['mode'] === 'simulation') {
+            if (!$user->plan?->allowsSimulation()) {
+                return $this->fail('Simulation mode is not included in your current plan.', 422);
+            }
+
             $simulationPercent = random_int(70, 80);
             $simulationCount = $exam->isAggregate()
                 ? random_int(70, 80)

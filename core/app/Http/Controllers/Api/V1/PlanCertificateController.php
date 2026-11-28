@@ -27,6 +27,10 @@ class PlanCertificateController extends Controller
             'yearly_price' => (float) ($plan->yearly_price ?? 0),
             'monthly_exams' => (int) ($plan->monthly_exam ?? 0),
             'yearly_exams' => (int) ($plan->yearly_exam ?? 0),
+            'allowed_categories' => $plan->accessCategoryIds(),
+            'allowed_exams' => $plan->accessExamIds(),
+            'simulation_mode' => $plan->allowsSimulation(),
+            'features' => (array) ($plan->feature_flags ?? []),
             'is_popular' => (int) $plan->id === (int) $maxId,
         ])->values()->all();
 
@@ -98,7 +102,7 @@ class PlanCertificateController extends Controller
         $user = $request->user();
         $user->plan_id = $plan->id;
         $user->exam_limit = (int) ($cycle === 'yearly' ? $plan->yearly_exam : $plan->monthly_exam);
-        $user->expired_date = ($cycle === 'yearly' ? now()->addYear() : now()->addMonth())->format('Y-m-d');
+        $user->expired_date = ($plan->is_free ? now()->addYears(10) : ($cycle === 'yearly' ? now()->addYear() : now()->addMonth()))->format('Y-m-d');
         $user->save();
 
         return $this->ok($this->formatUserProfile($user), 'Subscription activated.');

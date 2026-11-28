@@ -7135,6 +7135,15 @@ input[type=number] {
     font-weight: 900;
 }
 
+.pricing-list__item.is-locked::before {
+    content: "\f023";
+    color: hsl(var(--white)/0.45);
+}
+
+.pricing-list__item.is-locked .text {
+    color: hsl(var(--white)/0.55);
+}
+
 .pricing-list__item:not(:last-child) {
     margin-bottom: 16px;
 }
@@ -10190,8 +10199,8 @@ html:has(.exam-take-page) {
 
 .exam-take-page .exam-source-toggle {
     appearance: none;
-    background-color: rgba(125, 255, 72, .06) !important;
-    border: 1px solid rgba(125, 255, 72, .72) !important;
+    background-color: hsl(var(--base) / .06) !important;
+    border: 1px solid hsl(var(--base) / .72) !important;
     border-radius: 8px !important;
     min-height: 42px;
     padding: 9px 14px !important;
@@ -10199,9 +10208,9 @@ html:has(.exam-take-page) {
 
 .exam-take-page .exam-source-toggle:hover,
 .exam-take-page .exam-source-toggle:focus-visible {
-    background-color: rgba(125, 255, 72, .16) !important;
-    border-color: #7dff48 !important;
-    box-shadow: 0 0 0 3px rgba(125, 255, 72, .22) !important;
+    background-color: hsl(var(--base) / .16) !important;
+    border-color: hsl(var(--base)) !important;
+    box-shadow: 0 0 0 3px hsl(var(--base) / .22) !important;
 }
 
 .exam-mode-option {
@@ -10231,6 +10240,17 @@ html:has(.exam-take-page) {
     border-color: hsl(var(--base));
     box-shadow: 0 0 0 1px hsl(var(--base) / 0.35);
     color: hsl(var(--base)) !important;
+}
+
+.exam-mode-option.is-locked {
+    color: hsl(var(--body-color) / .65) !important;
+    cursor: pointer;
+    text-decoration: none;
+}
+
+.exam-mode-option.is-locked small {
+    color: hsl(var(--base));
+    font-size: .75em;
 }
 
 .exam-mode-option:focus-visible {

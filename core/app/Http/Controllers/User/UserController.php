@@ -128,6 +128,16 @@ class UserController extends Controller {
     public function subscribePlan($id, $interval = 0) {
         $plan = Plan::active()->findOrFail($id);
 
+        if ($plan->is_free || ((float) $plan->monthly_price <= 0 && (float) $plan->yearly_price <= 0)) {
+            $user = auth()->user();
+            $user->plan_id = $plan->id;
+            $user->exam_limit = (int) ($interval ? $plan->yearly_exam : $plan->monthly_exam);
+            $user->expired_date = now()->addYears(10)->format('Y-m-d');
+            $user->save();
+
+            return back()->withNotify([['success', 'Free plan activated successfully']]);
+        }
+
         $user           = auth()->user();
         $pendingPayment = $user->deposits()->where('status', Status::PAYMENT_PENDING)->count();
         if ($pendingPayment > 0) {

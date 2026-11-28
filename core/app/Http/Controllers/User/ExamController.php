@@ -29,6 +29,11 @@ class ExamController extends Controller {
             return back()->withNotify($notify);
         }
 
+        if (!$user->plan?->allowsExam($exam)) {
+            $notify[] = ['error', 'Your current plan does not include this exam bank.'];
+            return to_route('pricing')->withNotify($notify);
+        }
+
         if ($user->expired_date < now()->format('Y-m-d')) {
             $notify[] = ['error', 'Your subscription plan has expired. Please renew to continue using the service.'];
             return back()->withNotify($notify);
@@ -43,7 +48,11 @@ class ExamController extends Controller {
         // Every entry from All Exams is a fresh attempt and must pass through settings.
         $pageTitle = 'Exam Settings';
         $examSettings = array_merge($this->defaultExamSettings(), (array) ($user->exam_preferences ?? []));
-        return view('Template::user.exams.configure', compact('pageTitle', 'exam', 'questionCount', 'examSettings'));
+        $simulationAllowed = $user->plan?->allowsSimulation() ?? false;
+        if (!$simulationAllowed && ($examSettings['mode'] ?? 'study') === 'simulation') {
+            $examSettings['mode'] = 'study';
+        }
+        return view('Template::user.exams.configure', compact('pageTitle', 'exam', 'questionCount', 'examSettings', 'simulationAllowed'));
     }
 
     public function resume($id) {
@@ -65,6 +74,7 @@ class ExamController extends Controller {
     }
 
     private function renderAttempt(Exam $exam, AttendExam $attendExam, string $pageTitle) {
+        $user = auth()->user();
         $allQuestionIds = $this->orderedQuestionIds($exam);
         // Keep older in-progress attempts resumable with their original admin duration.
         if (!$attendExam->exam_settings) {
@@ -85,7 +95,8 @@ class ExamController extends Controller {
         $settings = $attendExam->exam_settings
             ? $this->settingsForAttempt($attendExam)
             : array_merge($this->defaultExamSettings(), ['timer' => 'legacy_duration']);
-        $showAnswers = (bool) ($settings['include_show_answer'] ?? true);
+        $showAnswers = (bool) ($settings['include_show_answer'] ?? true)
+            && ($user->plan?->hasFeature('answer_explanations') ?? false);
         $showLiveScore = (bool) ($settings['show_score_live'] ?? true);
         $timerLabel = $this->timerLabel($settings, $questionCount);
         $liveScore = $this->liveScoreForAttempt($exam, $attendExam, $allQuestionIds, $flowQuestionIds, true);
@@ -166,6 +177,11 @@ class ExamController extends Controller {
             return back()->withNotify($notify);
         }
 
+        if (!$user->plan?->allowsExam($exam)) {
+            $notify[] = ['error', 'Your current plan does not include this exam bank.'];
+            return to_route('pricing')->withNotify($notify);
+        }
+
         if ($user->exam_limit <= 0) {
             $notify[] = ['error', 'You do not have enough credit to perform this action.'];
             return back()->withNotify($notify);
@@ -180,6 +196,11 @@ class ExamController extends Controller {
             'inline_feedback' => 'nullable|boolean',
             'timer' => 'required|in:not_timed,ccna_120,90_mins,60_mins,30s_per_q,60s_per_q,90s_per_q',
         ]);
+
+        if ($validated['mode'] === 'simulation' && !$user->plan?->allowsSimulation()) {
+            $notify[] = ['error', 'Simulation mode is not included in your current plan.'];
+            return back()->withNotify($notify);
+        }
 
         $settings = [
             'mode' => $validated['mode'],
@@ -787,8 +808,13 @@ class ExamController extends Controller {
     }
 
     public function history() {
+        $user = auth()->user();
+        if (!$user->plan?->hasFeature('progress_tracking')) {
+            return to_route('pricing')->withNotify([['error', 'Progress tracking is not included in your current plan.']]);
+        }
+
         $pageTitle = 'Exam History';
-        $examLogs  = AttendExam::where('user_id', auth()->id())->with('exam')->searchable(['exam:title'])->latest()->paginate(getPaginate());
+        $examLogs  = AttendExam::where('user_id', $user->id)->with('exam')->searchable(['exam:title'])->latest()->paginate(getPaginate());
 
         $examIds = $examLogs->getCollection()->pluck('exam_id')->filter()->unique()->values();
         $attemptIds = $examLogs->getCollection()->pluck('id');
@@ -838,7 +864,7 @@ class ExamController extends Controller {
             ]);
         }
 
-        $historyStats = $this->historyStats(auth()->id());
+        $historyStats = $this->historyStats($user->id);
 
         return view('Template::user.exams.history', compact('pageTitle', 'examLogs', 'historyStats'));
     }
@@ -1341,6 +1367,9 @@ class ExamController extends Controller {
         $user = $attendExam->user;
         if (!$user) {
             abort(404);
+        }
+        if (!$user->plan?->hasFeature('certificate')) {
+            return back()->withNotify([['error', 'Completion certificates are not included in your current plan.']]);
         }
         $exam = $attendExam->exam;
         if (!$exam) {

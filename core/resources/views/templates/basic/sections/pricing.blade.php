@@ -1,11 +1,11 @@
 @php
     $pricingContent = getContent('pricing.content', true);
-    $plans = App\Models\Plan::active()->get();
+    $plans = App\Models\Plan::active()->orderBy('id')->get();
 @endphp
 
 
 
-<section class="pricing-section my-120">
+<section class="pricing-section my-120" id="pricing-plans">
     <div class="container">
         <div class="section-heading mb-lg-5 wow fadeInDown" data-wow-delay="0.2s">
             <h2 class="section-heading__title" data-highlight-start="{{ $pricingContent?->data_values?->highlight_start ?? 2 }}" data-highlight-word="{{ $pricingContent?->data_values?->highlight_end ?? 3 }}">
@@ -26,9 +26,18 @@
 
         <div class="row gy-4">
             @foreach ($plans as $plan)
+                @php
+                    $planCategories = $plan->accessCategories();
+                    $planExams = $plan->accessExams();
+                    $isCurrentPlan = auth()->check()
+                        && (int) auth()->user()->plan_id === (int) $plan->id
+                        && (!auth()->user()->expired_date || auth()->user()->expired_date >= now()->format('Y-m-d'));
+                    $categoryNames = $planCategories->pluck('name')->map(fn ($name) => __($name))->implode(', ');
+                    $bankNames = $planExams->pluck('title')->map(fn ($title) => __($title))->implode(', ');
+                @endphp
                 <div class="col-lg-4 col-sm-6 flex-grow-1">
-                    <div class="pricing-card wow fadeInDown  @if (auth()->check() && auth()->user()->plan_id == $plan->id && auth()->user()->expired_date >= now()) base-style @endif"" data-wow-delay="0.2s">
-                        @if (auth()->check() && auth()->user()->plan_id == $plan->id && auth()->user()->expired_date >= now())
+                    <div class="pricing-card wow fadeInDown @if ($isCurrentPlan) base-style @endif" data-wow-delay="0.2s">
+                        @if ($isCurrentPlan)
                             <div class="pricing-card__base">@lang('Expire this after') {{ diffForHumans(auth()->user()->expired_date) }}</div>
                         @endif
                         <div class="pricing-card__top">
@@ -52,34 +61,45 @@
                         <ul class="pricing-list">
                             <li class="pricing-list__item">
                                 <p class="text monthly-credit">
-                                    <span class="fw-semibold">{{ getAmount($plan->monthly_exam) }}</span> @lang('Exam Access')
+                                    <span class="fw-semibold">{{ getAmount($plan->monthly_exam) }}</span> @lang('monthly attempts')
                                 </p>
                                 <p class="text yearly-credit d-none">
-                                    <span class="fw-semibold">{{ getAmount($plan->yearly_exam) }}</span> @lang('Exam Access')
+                                    <span class="fw-semibold">{{ getAmount($plan->yearly_exam) }}</span> @lang('yearly attempts')
                                 </p>
                             </li>
-                            <li class="pricing-list__item">
-                                <p class="text">@lang('No Daily Limits')</p>
+                            <li class="pricing-list__item {{ $categoryNames ? '' : 'is-locked' }}">
+                                <p class="text"><span class="fw-semibold">@lang('Categories'):</span> {{ $categoryNames ?: __('Not included') }}</p>
                             </li>
-                            <li class="pricing-list__item">
-                                <p class="text">@lang('Lifetime Data Availability')</p>
+                            <li class="pricing-list__item {{ $bankNames ? '' : 'is-locked' }}">
+                                <p class="text"><span class="fw-semibold">@lang('Exam banks'):</span> {{ $bankNames ?: __('Not included') }}</p>
                             </li>
-                            <li class="pricing-list__item">
-                                <p class="text">@lang('Includes Completion Certificate')</p>
+                            <li class="pricing-list__item {{ $plan->allowsSimulation() ? '' : 'is-locked' }}">
+                                <p class="text">@lang('Simulation mode')</p>
                             </li>
-                            <li class="pricing-list__item">
-                                <p class="text">@lang('Progress Tracking Dashboard')</p>
+                            <li class="pricing-list__item {{ $plan->hasFeature('answer_explanations') ? '' : 'is-locked' }}">
+                                <p class="text">@lang('Answer explanations')</p>
                             </li>
-                            <li class="pricing-list__item">
-                                <p class="text">@lang('Mobile-Friendly Exam Interface')</p>
+                            <li class="pricing-list__item {{ $plan->hasFeature('progress_tracking') ? '' : 'is-locked' }}">
+                                <p class="text">@lang('Progress tracking')</p>
+                            </li>
+                            <li class="pricing-list__item {{ $plan->hasFeature('certificate') ? '' : 'is-locked' }}">
+                                <p class="text">@lang('Completion certificate')</p>
                             </li>
                         </ul>
 
-                        @auth
+                        @if ($isCurrentPlan)
+                            <span class="btn btn--md btn--base w-100">@lang('Current plan')</span>
+                        @elseif ($plan->is_free)
+                            @auth
+                                <button class="btn btn--md btn--base w-100 subscribeBtn" type="submit" data-plan_id="{{ $plan->id }}">@lang('Start free')</button>
+                            @else
+                                <a class="btn btn--md btn--base w-100" href="{{ route('user.register') }}">@lang('Create free account')</a>
+                            @endauth
+                        @elseif (auth()->check())
                             <button class="btn btn--md btn--base w-100 subscribeBtn" type="submit" data-plan_id="{{ $plan->id }}">@lang('Subscribe')</button>
                         @else
-                            <button class="btn btn--md btn--base w-100 loginBtn" type="button">@lang('Subscribe')</button>
-                        @endauth
+                            <button class="btn btn--md btn--base w-100 loginBtn" type="button">@lang('View plan')</button>
+                        @endif
                     </div>
                 </div>
             @endforeach
